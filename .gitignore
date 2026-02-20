@@ -1,0 +1,125 @@
+# ─── Miscellaneous ────────────────────────────────────────────────────────────
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.lock
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+*.code-workspace
+.packages
+.project
+.flutter-plugins.json
+*.xcuserstate
+*.xcworkspace
+xcuserdata/
+
+# ─── Flutter / Dart / Pub ─────────────────────────────────────────────────────
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-plugins.json
+.pub-cache/
+.pub/
+/build/
+/coverage/
+.packages
+
+# ─── Symbolication & Obfuscation ──────────────────────────────────────────────
+app.*.symbols
+app.*.map.json
+
+# ─── Android ──────────────────────────────────────────────────────────────────
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle/
+/android/local.properties
+/android/key.properties
+*.jks
+*.keystore
+android/app/src/main/java/io/flutter/app/
+android/app/src/main/kotlin/
+android/app/src/main/kotlin/
+gradle/app/libs/
+build/app/intermediates/flutter/
+build/app/outputs/
+
+# ─── iOS / macOS ──────────────────────────────────────────────────────────────
+**/ios/Pods/
+**/macos/Pods/
+ios/.bundle/
+**/Podfile.lock
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+*.xcodeproj/
+*.xcworkspace
+ios/Pods/
+ios/Runner/Runner.entitlements
+ios/Runner/Runner/Info.plist
+macos/Runner/Runner.entitlements
+
+# ─── Linux ────────────────────────────────────────────────────────────────────
+linux/.dart_tool/
+linux/build/
+linux/flutter/ephemeral/
+linux/runner/CMakeCache.txt
+linux/runner/CMakeFiles/
+linux/runner/Makefile
+linux/runner/cmake_install.cmake
+
+# ─── Windows ──────────────────────────────────────────────────────────────────
+windows/.dart_tool/
+windows/build/
+windows/flutter/ephemeral/
+windows/runner/CMakeCache.txt
+windows/runner/CMakeFiles/
+windows/runner/Makefile
+windows/runner/cmake_install.cmake
+
+# ─── Web ──────────────────────────────────────────────────────────────────────
+web/.dart_tool/
+web/build/
+web/ephemeral/
+
+# ─── Secrets & Environment ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*
+*.env
+secrets.dart
+api_keys.dart
+credentials.json
+*.pem
+*.key
+
+# ─── Generated files (Hive) ────────────────────────────────────────────────────
+# Раскомментируй если не хочешь коммитить сгенерированные адаптеры:
+# **/*.g.dart
+
+# ─── OS generated ─────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ─── Assets (личные фото разработчика) ───────────────────────────────────────
+assets/DeveloperPhoto.jpg
+assets/NiTeicon.png
