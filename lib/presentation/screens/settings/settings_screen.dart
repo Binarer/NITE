@@ -107,17 +107,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // --- Уведомления ---
           _SectionHeader('Уведомления'),
           _SettingsCard(
-            child: Obx(() => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Еженедельная ретроспектива',
-                      style: TextStyle(color: AppColors.textPrimary)),
-                  subtitle: const Text(
-                      'Каждый понедельник в 12:00 — отчёт о продуктивности',
-                      style: TextStyle(
-                          color: AppColors.textHint, fontSize: 12)),
-                  value: _c.notificationsEnabled.value,
-                  onChanged: _c.setNotificationsEnabled,
-                )),
+            child: Column(
+              children: [
+                Obx(() => SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Еженедельная ретроспектива',
+                          style: TextStyle(color: AppColors.textPrimary)),
+                      subtitle: const Text(
+                          'Каждый понедельник в 12:00 — отчёт о продуктивности',
+                          style: TextStyle(
+                              color: AppColors.textHint, fontSize: 12)),
+                      value: _c.notificationsEnabled.value,
+                      onChanged: _c.setNotificationsEnabled,
+                    )),
+                const Divider(color: AppColors.border, height: 24),
+                // Выбор времени напоминания о задачах
+                Row(
+                  children: [
+                    const Icon(Icons.alarm_outlined,
+                        color: AppColors.textSecondary, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Напоминание о задаче',
+                        style: TextStyle(color: AppColors.textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'За сколько минут до начала задачи',
+                    style: TextStyle(color: AppColors.textHint, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Obx(() {
+                  final selected = _c.taskReminderMinutes.value;
+                  return Row(
+                    children: [5, 10, 15, 30].map((minutes) {
+                      final isSelected = selected == minutes;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => _c.setTaskReminderMinutes(minutes),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            margin: const EdgeInsets.only(right: 6),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.accent
+                                  : AppColors.surfaceVariant,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.textSecondary
+                                    : AppColors.border,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  '$minutes',
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? AppColors.textPrimary
+                                        : AppColors.textSecondary,
+                                    fontSize: 16,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                Text(
+                                  'мин',
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? AppColors.textSecondary
+                                        : AppColors.textHint,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }),
+              ],
+            ),
           ),
           const SizedBox(height: 20),
 

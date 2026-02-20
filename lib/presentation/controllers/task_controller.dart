@@ -4,6 +4,8 @@ import '../../data/models/subtask_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/repositories/tag_repository.dart';
 import '../../data/repositories/task_repository.dart';
+import '../../data/services/notification_service.dart';
+import '../../data/services/settings_service.dart';
 import '../../data/services/widget_service.dart';
 
 class TaskController extends GetxController {
@@ -32,6 +34,33 @@ class TaskController extends GetxController {
     }
   }
 
+  /// Планирует уведомление-напоминание для задачи, если у неё есть время начала
+  /// и уведомления включены в настройках.
+  Future<void> _scheduleReminderIfNeeded(TaskModel task) async {
+    try {
+      final settings = Get.find<SettingsService>();
+      if (!settings.notificationsEnabled) return;
+      final startMinutes = task.startMinutes;
+      if (startMinutes == null) return;
+      await NotificationService().scheduleTaskReminder(
+        taskId: task.id,
+        taskName: task.name,
+        date: task.date,
+        startMinutes: startMinutes,
+        minutesBefore: settings.taskReminderMinutes,
+      );
+    } catch (_) {
+      // Уведомления не критичны
+    }
+  }
+
+  /// Отменяет уведомление-напоминание для задачи
+  Future<void> _cancelReminder(String taskId) async {
+    try {
+      await NotificationService().cancelTaskReminder(taskId);
+    } catch (_) {}
+  }
+
   List<TaskModel> getByDate(DateTime date) => _repo.getByDate(date);
 
   List<TaskModel> getByWeek(DateTime weekStart) => _repo.getByWeek(weekStart);
@@ -40,6 +69,7 @@ class TaskController extends GetxController {
     await _repo.save(task);
     loadTasks();
     _refreshWidget();
+    await _scheduleReminderIfNeeded(task);
   }
 
   Future<TaskModel> createTask({
@@ -81,10 +111,12 @@ class TaskController extends GetxController {
     await _repo.save(task);
     loadTasks();
     _refreshWidget();
+    await _scheduleReminderIfNeeded(task);
     return task;
   }
 
   Future<void> deleteTask(String id) async {
+    await _cancelReminder(id);
     await _repo.delete(id);
     loadTasks();
     _refreshWidget();
@@ -109,6 +141,7 @@ class TaskController extends GetxController {
     await _repo.save(updated);
     loadTasks();
     _refreshWidget();
+    await _scheduleReminderIfNeeded(updated);
   }
 
   /// Переключает статус подзадачи.

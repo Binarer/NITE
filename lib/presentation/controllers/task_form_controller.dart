@@ -82,7 +82,7 @@ class TaskFormController extends GetxController {
       foodItemGrams[id] = task.foodGrams > 0 ? task.foodGrams : 100.0;
     }
     // Подзадачи
-    subtasks.value = task.subtasks.map((s) => {
+    subtasks.value = task.subtasks.map((s) => <String, dynamic>{
       'id': s.id,
       'title': s.title,
       'isCompleted': s.isCompleted,
@@ -91,7 +91,7 @@ class TaskFormController extends GetxController {
 
   void addSubtask(String title) {
     if (title.trim().isEmpty) return;
-    subtasks.add({
+    subtasks.add(<String, dynamic>{
       'id': const Uuid().v4(),
       'title': title.trim(),
       'isCompleted': false,
@@ -106,7 +106,7 @@ class TaskFormController extends GetxController {
     final index = subtasks.indexWhere((s) => s['id'] == id);
     if (index < 0) return;
     final s = subtasks[index];
-    subtasks[index] = {
+    subtasks[index] = <String, dynamic>{
       'id': s['id'],
       'title': s['title'],
       'isCompleted': !(s['isCompleted'] as bool),
@@ -117,7 +117,7 @@ class TaskFormController extends GetxController {
     final index = subtasks.indexWhere((s) => s['id'] == id);
     if (index < 0) return;
     final s = subtasks[index];
-    subtasks[index] = {
+    subtasks[index] = <String, dynamic>{
       'id': s['id'],
       'title': newTitle.trim(),
       'isCompleted': s['isCompleted'],

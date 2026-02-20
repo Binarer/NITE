@@ -91,6 +91,14 @@ class SettingsService {
     await _box.put('notifications_enabled', value);
   }
 
+  /// За сколько минут до задачи присылать уведомление (5, 10, 15, 30)
+  int get taskReminderMinutes =>
+      _box.get('task_reminder_minutes', defaultValue: 15) as int;
+
+  Future<void> setTaskReminderMinutes(int minutes) async {
+    await _box.put('task_reminder_minutes', minutes);
+  }
+
   /// Сторона меню: 'left' или 'right'
   String get menuSide =>
       _box.get(AppConstants.settingsMenuSide, defaultValue: 'left') as String;

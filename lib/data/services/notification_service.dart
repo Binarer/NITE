@@ -18,6 +18,8 @@ class NotificationService {
   static const int _dailyReportScheduleId = 3;
   static const int _dailyReportShowId = 4;
   static const int _testNotificationId = 99;
+  // Task reminders используют ID = 1000 + хэш от task id (по модулю 10000)
+  static const int _taskReminderBaseId = 1000;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -198,6 +200,77 @@ class NotificationService {
       summary,
       details,
     );
+  }
+
+  // ─── Напоминания о конкретных задачах ────────────────────────────────────
+
+  /// Планирует напоминание о задаче за [minutesBefore] минут до startMinutes.
+  /// [taskId] — уникальный ID задачи, [taskName] — название,
+  /// [date] — дата задачи, [startMinutes] — время начала (часы*60+минуты).
+  Future<void> scheduleTaskReminder({
+    required String taskId,
+    required String taskName,
+    required DateTime date,
+    required int startMinutes,
+    required int minutesBefore,
+  }) async {
+    if (!_initialized) await init();
+
+    // Вычисляем числовой ID из taskId (стабильный хэш, влезающий в int)
+    final notifId = _taskReminderBaseId + taskId.hashCode.abs() % 10000;
+
+    // Отменяем предыдущее расписание для этой задачи
+    await _plugin.cancel(notifId);
+
+    // Время старта задачи
+    final taskStart = tz.TZDateTime(
+      tz.local,
+      date.year,
+      date.month,
+      date.day,
+      startMinutes ~/ 60,
+      startMinutes % 60,
+    );
+
+    // Уведомление за N минут до начала
+    final notifyAt = taskStart.subtract(Duration(minutes: minutesBefore));
+
+    // Не планируем уведомление в прошлом
+    if (notifyAt.isBefore(tz.TZDateTime.now(tz.local))) return;
+
+    const androidDetails = AndroidNotificationDetails(
+      'task_reminder',
+      'Напоминания о задачах',
+      channelDescription: 'Напоминания о предстоящих задачах',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const iosDetails = DarwinNotificationDetails();
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    final minutesLabel = minutesBefore == 1
+        ? '1 минуту'
+        : '$minutesBefore минут';
+
+    await _plugin.zonedSchedule(
+      notifId,
+      '⏰ Напоминание',
+      'Через $minutesLabel: $taskName',
+      notifyAt,
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  /// Отменяет напоминание для конкретной задачи по её ID
+  Future<void> cancelTaskReminder(String taskId) async {
+    final notifId = _taskReminderBaseId + taskId.hashCode.abs() % 10000;
+    await _plugin.cancel(notifId);
   }
 
   // ─── Тестовые уведомления (для раздела "Для разработчиков") ──────────────

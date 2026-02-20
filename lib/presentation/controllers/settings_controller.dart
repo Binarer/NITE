@@ -11,6 +11,7 @@ class SettingsController extends GetxController {
   final RxString mistralApiKey = ''.obs;
   final RxString timezone = ''.obs;
   final RxBool notificationsEnabled = false.obs;
+  final RxInt taskReminderMinutes = 15.obs;
   final RxBool isSavingKey = false.obs;
   final RxBool isTestingKey = false.obs;
   // null = не проверялось, true = ок, false = ошибка
@@ -38,6 +39,7 @@ class SettingsController extends GetxController {
     mistralApiKey.value = _settings.legacyMistralKey();
     timezone.value = _settings.timezone;
     notificationsEnabled.value = _settings.notificationsEnabled;
+    taskReminderMinutes.value = _settings.taskReminderMinutes;
     menuSide.value = _settings.menuSide;
     aiProvider.value = _settings.aiProvider;
     _loadProviderSettings(aiProvider.value);
@@ -131,6 +133,11 @@ class SettingsController extends GetxController {
     } else {
       await _notifications.cancelAll();
     }
+  }
+
+  Future<void> setTaskReminderMinutes(int minutes) async {
+    taskReminderMinutes.value = minutes;
+    await _settings.setTaskReminderMinutes(minutes);
   }
 
   Future<void> setTimezone(String tz) async {
