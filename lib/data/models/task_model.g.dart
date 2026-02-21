@@ -28,15 +28,11 @@ class TaskModelAdapter extends TypeAdapter<TaskModel> {
       endMinutes: fields[8] as int?,
       sortOrder: fields[9] as int,
       foodItemId: fields[10] as String?,
+      foodItemIds: (fields[13] as List).cast<String>(),
       scenarioId: fields[11] as String?,
       isCompleted: fields[12] as bool,
-      foodItemIds: fields[13] == null
-          ? []
-          : (fields[13] as List).cast<String>(),
-      subtasks: fields[14] == null
-          ? []
-          : (fields[14] as List).cast<SubtaskModel>(),
-      foodGrams: (fields[15] as double?) ?? 100.0,
+      subtasks: (fields[14] as List).cast<SubtaskModel>(),
+      foodGrams: fields[15] as double,
     );
   }
 
@@ -66,12 +62,12 @@ class TaskModelAdapter extends TypeAdapter<TaskModel> {
       ..write(obj.sortOrder)
       ..writeByte(10)
       ..write(obj.foodItemId)
+      ..writeByte(13)
+      ..write(obj.foodItemIds)
       ..writeByte(11)
       ..write(obj.scenarioId)
       ..writeByte(12)
       ..write(obj.isCompleted)
-      ..writeByte(13)
-      ..write(obj.foodItemIds)
       ..writeByte(14)
       ..write(obj.subtasks)
       ..writeByte(15)

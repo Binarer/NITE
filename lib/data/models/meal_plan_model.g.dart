@@ -1,38 +1,35 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'food_item_model.dart';
+part of 'meal_plan_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class MacroNutrientsAdapter extends TypeAdapter<MacroNutrients> {
+class MealEntryAdapter extends TypeAdapter<MealEntry> {
   @override
-  final int typeId = 5;
+  final int typeId = 9;
 
   @override
-  MacroNutrients read(BinaryReader reader) {
+  MealEntry read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return MacroNutrients(
-      proteins: fields[0] as double,
-      fats: fields[1] as double,
-      carbs: fields[2] as double,
+    return MealEntry(
+      foodItemId: fields[0] as String,
+      grams: fields[1] as double,
     );
   }
 
   @override
-  void write(BinaryWriter writer, MacroNutrients obj) {
+  void write(BinaryWriter writer, MealEntry obj) {
     writer
-      ..writeByte(3)
-      ..writeByte(0)
-      ..write(obj.proteins)
-      ..writeByte(1)
-      ..write(obj.fats)
       ..writeByte(2)
-      ..write(obj.carbs);
+      ..writeByte(0)
+      ..write(obj.foodItemId)
+      ..writeByte(1)
+      ..write(obj.grams);
   }
 
   @override
@@ -41,50 +38,54 @@ class MacroNutrientsAdapter extends TypeAdapter<MacroNutrients> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is MacroNutrientsAdapter &&
+      other is MealEntryAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }
 
-class FoodItemModelAdapter extends TypeAdapter<FoodItemModel> {
+class MealPlanModelAdapter extends TypeAdapter<MealPlanModel> {
   @override
-  final int typeId = 2;
+  final int typeId = 8;
 
   @override
-  FoodItemModel read(BinaryReader reader) {
+  MealPlanModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return FoodItemModel(
+    return MealPlanModel(
       id: fields[0] as String,
       name: fields[1] as String,
-      photoPath: fields[2] as String?,
-      description: fields[3] as String,
-      calories: fields[4] as double,
-      macros: fields[5] as MacroNutrients,
-      isHidden: fields[6] == null ? false : fields[6] as bool,
+      entries: (fields[2] as Map?)?.map((dynamic k, dynamic v) =>
+          MapEntry(k as String, (v as List).cast<MealEntry>())),
+      dailyCalorieTarget: fields[3] as double,
+      dailyProteinTarget: fields[4] as double,
+      dailyFatTarget: fields[5] as double,
+      dailyCarbTarget: fields[6] as double,
+      createdAt: fields[7] as DateTime?,
     );
   }
 
   @override
-  void write(BinaryWriter writer, FoodItemModel obj) {
+  void write(BinaryWriter writer, MealPlanModel obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.photoPath)
+      ..write(obj.entries)
       ..writeByte(3)
-      ..write(obj.description)
+      ..write(obj.dailyCalorieTarget)
       ..writeByte(4)
-      ..write(obj.calories)
+      ..write(obj.dailyProteinTarget)
       ..writeByte(5)
-      ..write(obj.macros)
+      ..write(obj.dailyFatTarget)
       ..writeByte(6)
-      ..write(obj.isHidden);
+      ..write(obj.dailyCarbTarget)
+      ..writeByte(7)
+      ..write(obj.createdAt);
   }
 
   @override
@@ -93,7 +94,7 @@ class FoodItemModelAdapter extends TypeAdapter<FoodItemModel> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is FoodItemModelAdapter &&
+      other is MealPlanModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

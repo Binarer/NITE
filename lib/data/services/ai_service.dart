@@ -28,7 +28,7 @@ class AiService {
       return null;
     } on DioException catch (e) {
       final status = e.response?.statusCode;
-      if (status == 401 || status == 403) return 'Неверный API ключ (${status})';
+      if (status == 401 || status == 403) return 'Неверный API ключ ($status)';
       if (status == 429) return 'Превышен лимит запросов';
       if (status != null) return 'Ошибка сервера: $status';
       return 'Нет соединения с ${provider.displayName}';

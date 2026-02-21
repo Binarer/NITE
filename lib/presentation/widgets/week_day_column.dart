@@ -167,7 +167,7 @@ class WeekDayColumn extends StatelessWidget {
                               task: task,
                               tags: tags,
                               onTap: () {
-                                Get.toNamed(AppRoutes.taskEdit, arguments: task);
+                                Get.toNamed(AppRoutes.taskDetail, arguments: task);
                               },
                               onToggleComplete: () {
                                 taskController.toggleComplete(task);

@@ -1,0 +1,68 @@
+name: Build & Release APK
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'   # Срабатывает на теги вида v1.2.1
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build split APKs
+        run: flutter build apk --split-per-abi --release
+
+      - name: Rename APKs
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             build/app/outputs/flutter-apk/NiTe-${VERSION}-arm64.apk
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             build/app/outputs/flutter-apk/NiTe-${VERSION}-arm32.apk
+          mv build/app/outputs/flutter-apk/app-x86_64-release.apk \
+             build/app/outputs/flutter-apk/NiTe-${VERSION}-x86_64.apk
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          # Вытащить блок changelog между этой версией и предыдущей
+          NOTES=$(awk "/^## \[${VERSION}\]/,/^## \[/" CHANGELOG.md | head -n -1 | tail -n +2)
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "NiTe ${{ github.ref_name }}"
+          body: ${{ steps.changelog.outputs.NOTES }}
+          files: |
+            build/app/outputs/flutter-apk/NiTe-${{ github.ref_name }}-arm64.apk
+            build/app/outputs/flutter-apk/NiTe-${{ github.ref_name }}-arm32.apk
+            build/app/outputs/flutter-apk/NiTe-${{ github.ref_name }}-x86_64.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

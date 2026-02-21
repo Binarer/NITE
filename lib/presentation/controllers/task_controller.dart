@@ -2,9 +2,10 @@ import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/models/subtask_model.dart';
 import '../../data/models/task_model.dart';
-import '../../data/repositories/tag_repository.dart';
 import '../../data/repositories/task_repository.dart';
-import '../../data/services/widget_service.dart';
+import '../../data/services/notification_service.dart';
+import '../../data/services/settings_service.dart';
+import '../../core/utils/app_logger.dart';
 
 class TaskController extends GetxController {
   final TaskRepository _repo = Get.find<TaskRepository>();
@@ -22,14 +23,33 @@ class TaskController extends GetxController {
     allTasks.value = _repo.getAll();
   }
 
-  /// Обновляет виджет домашнего экрана с актуальной ближайшей задачей
-  void _refreshWidget() {
+  /// Планирует уведомление-напоминание для задачи, если у неё есть время начала
+  /// и уведомления включены в настройках.
+  Future<void> _scheduleReminderIfNeeded(TaskModel task) async {
     try {
-      final tags = Get.find<TagRepository>().getAll();
-      WidgetService().updateWithNextTask(allTasks, tags);
-    } catch (_) {
-      // Виджет не критичен — молча игнорируем ошибки
+      final settings = Get.find<SettingsService>();
+      // Проверяем оба флага: общие уведомления И напоминания о задачах
+      if (!settings.notificationsEnabled) return;
+      if (!settings.taskRemindersEnabled) return;
+      final startMinutes = task.startMinutes;
+      if (startMinutes == null) return;
+      await NotificationService().scheduleTaskReminder(
+        taskId: task.id,
+        taskName: task.name,
+        date: task.date,
+        startMinutes: startMinutes,
+        minutesBefore: settings.taskReminderMinutes,
+      );
+    } catch (e, st) {
+      log.error('NotificationService', 'Ошибка планирования: $e\n$st');
     }
+  }
+
+  /// Отменяет уведомление-напоминание для задачи
+  Future<void> _cancelReminder(String taskId) async {
+    try {
+      await NotificationService().cancelTaskReminder(taskId);
+    } catch (_) {}
   }
 
   List<TaskModel> getByDate(DateTime date) => _repo.getByDate(date);
@@ -39,7 +59,7 @@ class TaskController extends GetxController {
   Future<void> saveTask(TaskModel task) async {
     await _repo.save(task);
     loadTasks();
-    _refreshWidget();
+    await _scheduleReminderIfNeeded(task);
   }
 
   Future<TaskModel> createTask({
@@ -80,21 +100,20 @@ class TaskController extends GetxController {
 
     await _repo.save(task);
     loadTasks();
-    _refreshWidget();
+    await _scheduleReminderIfNeeded(task);
     return task;
   }
 
   Future<void> deleteTask(String id) async {
+    await _cancelReminder(id);
     await _repo.delete(id);
     loadTasks();
-    _refreshWidget();
   }
 
   Future<void> toggleComplete(TaskModel task) async {
     final updated = task.copyWith(isCompleted: !task.isCompleted);
     await _repo.save(updated);
     loadTasks();
-    _refreshWidget();
   }
 
   /// Перемещает задачу на другую дату (drag & drop между днями)
@@ -108,7 +127,7 @@ class TaskController extends GetxController {
     );
     await _repo.save(updated);
     loadTasks();
-    _refreshWidget();
+    await _scheduleReminderIfNeeded(updated);
   }
 
   /// Переключает статус подзадачи.
@@ -130,7 +149,6 @@ class TaskController extends GetxController {
     );
     await _repo.save(updated);
     loadTasks();
-    _refreshWidget();
   }
 
   /// Переупорядочивает задачи внутри одного дня

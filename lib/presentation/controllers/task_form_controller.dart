@@ -7,7 +7,8 @@ import 'package:uuid/uuid.dart';
 import '../../data/models/subtask_model.dart';
 import '../../data/models/tag_model.dart';
 import '../../data/models/task_model.dart';
-import '../../data/services/mistral_service.dart';
+import '../../data/repositories/tag_repository.dart';
+import '../../data/services/ai_service.dart';
 import '../../data/services/settings_service.dart';
 import 'task_controller.dart';
 
@@ -82,7 +83,7 @@ class TaskFormController extends GetxController {
       foodItemGrams[id] = task.foodGrams > 0 ? task.foodGrams : 100.0;
     }
     // Подзадачи
-    subtasks.value = task.subtasks.map((s) => {
+    subtasks.value = task.subtasks.map((s) => <String, dynamic>{
       'id': s.id,
       'title': s.title,
       'isCompleted': s.isCompleted,
@@ -91,7 +92,7 @@ class TaskFormController extends GetxController {
 
   void addSubtask(String title) {
     if (title.trim().isEmpty) return;
-    subtasks.add({
+    subtasks.add(<String, dynamic>{
       'id': const Uuid().v4(),
       'title': title.trim(),
       'isCompleted': false,
@@ -106,7 +107,7 @@ class TaskFormController extends GetxController {
     final index = subtasks.indexWhere((s) => s['id'] == id);
     if (index < 0) return;
     final s = subtasks[index];
-    subtasks[index] = {
+    subtasks[index] = <String, dynamic>{
       'id': s['id'],
       'title': s['title'],
       'isCompleted': !(s['isCompleted'] as bool),
@@ -117,7 +118,7 @@ class TaskFormController extends GetxController {
     final index = subtasks.indexWhere((s) => s['id'] == id);
     if (index < 0) return;
     final s = subtasks[index];
-    subtasks[index] = {
+    subtasks[index] = <String, dynamic>{
       'id': s['id'],
       'title': newTitle.trim(),
       'isCompleted': s['isCompleted'],
@@ -138,10 +139,11 @@ class TaskFormController extends GetxController {
         connectTimeout: const Duration(seconds: 4),
         receiveTimeout: const Duration(seconds: 4),
       ));
-      await dio.get('https://api.mistral.ai');
+      // Используем нейтральный эндпоинт — не привязан к конкретному AI-провайдеру
+      await dio.get('https://www.google.com');
       hasInternet.value = true;
     } on DioException catch (e) {
-      // 401/403/404 — сервер отвечает, значит интернет есть
+      // Любой HTTP-ответ означает, что интернет есть
       if (e.response != null) {
         hasInternet.value = true;
       } else {
@@ -281,27 +283,49 @@ class TaskFormController extends GetxController {
   }
 
   Future<void> _evaluateWithAi() async {
-    final apiKey = _settings.mistralApiKey;
+    final provider = _settings.aiProvider;
+    final apiKey = _settings.getApiKey(provider);
     if (apiKey.isEmpty) return;
 
-    final service = MistralService(apiKey: apiKey);
-    final tempTask = TaskModel(
-      id: editingTask?.id ?? const Uuid().v4(),
-      name: nameController.text.trim(),
-      description: descriptionController.text.trim(),
-      tagIds: List<String>.from(selectedTagIds),
-      priority: priority.value,
-      date: selectedDate.value,
-      startMinutes: startMinutes.value,
-      endMinutes: endMinutes.value,
+    final model = _settings.getModel(provider);
+    final service = AiService(
+      provider: provider,
+      apiKey: apiKey,
+      model: model,
     );
 
-    final dayTasks = _taskController.getByDate(selectedDate.value)
-        .where((t) => t.id != tempTask.id)
-        .toList();
+    // Собираем имена тегов для контекста промпта
+    List<String> tagNames = [];
+    try {
+      final repo = Get.find<TagRepository>();
+      tagNames = selectedTagIds
+          .map((id) => repo.getById(id)?.name)
+          .whereType<String>()
+          .where((n) => n.isNotEmpty)
+          .toList();
+    } catch (_) {}
 
-    final result = await service.evaluateTaskPriority(tempTask, dayTasks: dayTasks);
-    priority.value = result;
+    String? timeInfo;
+    if (startMinutes.value != null) {
+      final h = (startMinutes.value! ~/ 60).toString().padLeft(2, '0');
+      final m = (startMinutes.value! % 60).toString().padLeft(2, '0');
+      timeInfo = '$h:$m';
+      if (endMinutes.value != null) {
+        final eh = (endMinutes.value! ~/ 60).toString().padLeft(2, '0');
+        final em = (endMinutes.value! % 60).toString().padLeft(2, '0');
+        timeInfo += ' – $eh:$em';
+      }
+    }
+
+    final result = await service.estimatePriority(
+      taskName: nameController.text.trim(),
+      description: descriptionController.text.trim(),
+      tagNames: tagNames,
+      timeInfo: timeInfo,
+    );
+    if (result != null) {
+      priority.value = result;
+    }
   }
 
   @override

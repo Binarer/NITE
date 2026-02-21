@@ -78,7 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildHeader(menuSide),
               _buildWeekNavigator(),
-              _buildViewModeToggle(),
               _buildTagFilter(),
               Expanded(
                 child: Obx(() {
@@ -114,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // ignore: unused_element
   Widget _buildViewModeToggle() {
     return Obx(() {
       final mode = _homeController.viewMode.value;
@@ -324,7 +324,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         task: task,
                         tags: tags,
                         onTap: () => Get.toNamed(
-                          AppRoutes.taskEdit,
+                          AppRoutes.taskDetail,
                           arguments: task,
                         ),
                         onToggleComplete: () =>
@@ -564,7 +564,7 @@ class _TagFilterChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: isSelected
-              ? color.withOpacity(0.2)
+              ? color.withValues(alpha: 0.2)
               : AppColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(

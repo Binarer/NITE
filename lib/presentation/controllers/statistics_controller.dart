@@ -311,8 +311,8 @@ class StatisticsController extends GetxController {
                 content.toLowerCase().contains(f.name.toLowerCase()));
 
             final taskName = matchedFood != null
-                ? '${mealName}: ${matchedFood.name}'
-                : '${mealName}: $content';
+                ? '$mealName: ${matchedFood.name}'
+                : '$mealName: $content';
 
             scenarioTasks.add({
               'name': taskName,
