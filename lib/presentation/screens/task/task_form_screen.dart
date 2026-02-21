@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/food_item_repository.dart';
+import '../../../data/services/settings_service.dart';
 import '../../controllers/task_form_controller.dart';
 import '../../widgets/priority_slider_widget.dart';
 import '../../widgets/tag_picker_widget.dart';
@@ -163,11 +164,15 @@ class TaskFormScreen extends StatelessWidget {
             const SizedBox(height: 16),
 
             // AI оценка приоритета
-            Obx(() => _AiPriorityTile(
-                  value: c.useAiPriority.value,
-                  hasInternet: c.hasInternet.value,
-                  onChanged: (v) => c.useAiPriority.value = v,
-                )),
+            Obx(() {
+              final providerName = Get.find<SettingsService>().aiProvider.displayName;
+              return _AiPriorityTile(
+                value: c.useAiPriority.value,
+                hasInternet: c.hasInternet.value,
+                providerName: providerName,
+                onChanged: (v) => c.useAiPriority.value = v,
+              );
+            }),
             const SizedBox(height: 20),
 
             // Привязка карточек еды (только если выбран тег "Еда")
@@ -510,11 +515,13 @@ class _TimePickerTile extends StatelessWidget {
 class _AiPriorityTile extends StatelessWidget {
   final bool value;
   final bool hasInternet;
+  final String providerName;
   final void Function(bool) onChanged;
 
   const _AiPriorityTile({
     required this.value,
     required this.hasInternet,
+    required this.providerName,
     required this.onChanged,
   });
 
@@ -545,7 +552,7 @@ class _AiPriorityTile extends StatelessWidget {
                 ),
                 Text(
                   hasInternet
-                      ? 'Mistral AI определит приоритет при сохранении'
+                      ? '$providerName определит приоритет при сохранении'
                       : 'Нет подключения к интернету',
                   style: const TextStyle(
                     color: AppColors.textHint,

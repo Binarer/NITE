@@ -63,13 +63,14 @@ class FoodItemModelAdapter extends TypeAdapter<FoodItemModel> {
       description: fields[3] as String,
       calories: fields[4] as double,
       macros: fields[5] as MacroNutrients,
+      isHidden: fields[6] == null ? false : fields[6] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, FoodItemModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -81,7 +82,9 @@ class FoodItemModelAdapter extends TypeAdapter<FoodItemModel> {
       ..writeByte(4)
       ..write(obj.calories)
       ..writeByte(5)
-      ..write(obj.macros);
+      ..write(obj.macros)
+      ..writeByte(6)
+      ..write(obj.isHidden);
   }
 
   @override

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
@@ -23,12 +21,11 @@ import 'data/repositories/meal_plan_repository.dart';
 import 'data/repositories/scenario_repository.dart';
 import 'data/repositories/tag_repository.dart';
 import 'data/repositories/task_repository.dart';
+import 'data/services/background_worker.dart';
 import 'data/services/export_import_service.dart';
-import 'data/services/notification_service.dart';
-import 'data/services/report_service.dart';
 import 'data/services/settings_service.dart';
-import 'data/services/widget_service.dart';
 import 'presentation/controllers/home_controller.dart';
+import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/controllers/tag_controller.dart';
 import 'presentation/controllers/task_controller.dart';
 import 'presentation/screens/home/home_screen.dart';
@@ -48,6 +45,7 @@ import 'presentation/screens/help/help_screen.dart';
 import 'presentation/screens/debtor/debtor_screen.dart';
 import 'presentation/screens/meal_plan/meal_plan_screen.dart';
 import 'presentation/screens/reports/reports_screen.dart';
+import 'presentation/screens/settings/logs_screen.dart';
 import 'presentation/screens/settings/tag_manager_screen.dart';
 import 'presentation/screens/statistics/statistics_screen.dart';
 import 'presentation/screens/task/task_detail_screen.dart';
@@ -107,32 +105,13 @@ void main() async {
   Get.put(MealPlanController(), permanent: true);
   Get.put(ExportImportService(), permanent: true);
 
-  // Инициализация уведомлений
-  final notificationService = NotificationService();
-  await notificationService.init();
-
-  // Применяем сохранённый часовой пояс
+  // Инициализация фоновых задач (генерация AI-отчётов даже при закрытом приложении)
   final settingsService = Get.find<SettingsService>();
-  await notificationService.setTimezone(settingsService.timezone);
-
-  // Если уведомления включены — перепланируем расписание
   if (settingsService.notificationsEnabled) {
-    await notificationService.scheduleWeeklyRetrospective();
-    await notificationService.scheduleDailyReport();
+    await initBackgroundWorker();
   }
 
-  // Инициализация виджета домашнего экрана
-  await WidgetService().init();
-
-  // Триггер ретроспективы: если сегодня ПН и есть API ключ — показать отчёт
-  _maybeShowWeeklyRetrospective(settingsService, notificationService);
-
-  // Должник: показать экран просрочек если включён
-  _maybeShowDebtor(settingsService);
-
-  // Триггер ежедневного отчёта: если время >= 22:00 и нет отчёта за сегодня
-  _maybeShowDailyReport(settingsService);
-
+  // Уведомления, перепланирование и показ диалогов теперь происходят в SplashScreen
   runApp(const NiteApp());
 }
 
@@ -143,226 +122,6 @@ class _TaskFormBinding extends Bindings {
   }
 }
 
-/// Проверяет: если сегодня понедельник и уведомления включены —
-/// запускает AI-ретроспективу и показывает уведомление + диалог в приложении.
-void _maybeShowWeeklyRetrospective(
-  SettingsService settings,
-  NotificationService notifications,
-) async {
-  if (!settings.notificationsEnabled) return;
-  if (DateTime.now().weekday != DateTime.monday) return;
-
-  // Используем универсальный провайдер вместо legacy Mistral-ключа
-  final provider = settings.aiProvider;
-  final apiKey = settings.getApiKey(provider);
-  if (apiKey.isEmpty) return;
-
-  // Проверяем интернет
-  try {
-    final result = await InternetAddress.lookup('api.mistral.ai');
-    if (result.isEmpty || result[0].rawAddress.isEmpty) return;
-  } catch (_) {
-    return;
-  }
-
-  // Собираем выполненные задачи прошлой недели
-  final repo = Get.find<TaskRepository>();
-  final now = DateTime.now();
-  final lastMonday = now.subtract(Duration(days: now.weekday - 1 + 7));
-  final lastSunday = lastMonday.add(const Duration(days: 6));
-  final completedTasks = repo.getAll().where((t) {
-    return t.isCompleted &&
-        !t.date.isBefore(DateTime(lastMonday.year, lastMonday.month, lastMonday.day)) &&
-        !t.date.isAfter(DateTime(lastSunday.year, lastSunday.month, lastSunday.day));
-  }).toList();
-
-  if (completedTasks.isEmpty) return;
-
-  try {
-    final reportService = ReportService();
-    final report = await reportService.generateWeeklyReport(
-      weekStart: lastMonday,
-    );
-
-    if (report == null) return;
-
-    // Диалог внутри приложения (развёрнутый отчёт) — показываем после запуска
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Get.dialog(
-        _WeeklyReportDialog(report: report),
-        barrierDismissible: true,
-      );
-    });
-  } catch (_) {
-    // Тихо игнорируем ошибки ретроспективы — не мешаем запуску приложения
-  }
-}
-
-/// Проверяет: если время >= 22:00 и за сегодня отчёт ещё не генерировался —
-/// генерирует ежедневный AI-отчёт и показывает его.
-void _maybeShowDailyReport(SettingsService settings) async {
-  if (!settings.notificationsEnabled) return;
-  final now = DateTime.now();
-  if (now.hour < 22) return;
-
-  final provider = settings.aiProvider;
-  final apiKey = settings.getApiKey(provider);
-  if (apiKey.isEmpty) return;
-
-  // Проверяем — был ли уже отчёт за сегодня
-  try {
-    final reportRepo = Get.find<AiReportRepository>();
-    final today = DateTime(now.year, now.month, now.day);
-    final existing = reportRepo.getDailyReport(today);
-    if (existing != null) return; // уже есть отчёт за сегодня
-  } catch (_) {
-    return;
-  }
-
-  // Проверяем интернет
-  try {
-    final result = await InternetAddress.lookup('api.mistral.ai');
-    if (result.isEmpty || result[0].rawAddress.isEmpty) return;
-  } catch (_) {
-    return;
-  }
-
-  try {
-    final report = await ReportService().generateDailyReport(date: now);
-    if (report == null) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Get.dialog(
-        _DailyReportDialog(report: report),
-        barrierDismissible: true,
-      );
-    });
-  } catch (_) {}
-}
-
-/// Диалог с ежедневным отчётом от AI
-class _DailyReportDialog extends StatelessWidget {
-  final String report;
-  const _DailyReportDialog({required this.report});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1C1C1C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFF3A3A3A)),
-      ),
-      title: const Row(
-        children: [
-          Text('📊', style: TextStyle(fontSize: 20)),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Итоги дня',
-              style: TextStyle(
-                color: Color(0xFFFFFFFF),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Text(
-          report,
-          style: const TextStyle(
-            color: Color(0xFFB0B0B0),
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Get.back(),
-          child: const Text(
-            'Закрыть',
-            style: TextStyle(color: Color(0xFF888888)),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Показывает экран "Должник" если есть просроченные задачи и функция включена
-void _maybeShowDebtor(SettingsService settings) {
-  if (!settings.debtorEnabled) return;
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    try {
-      final taskRepo = Get.find<TaskRepository>();
-      final today = DateTime.now();
-      final todayDay = DateTime(today.year, today.month, today.day);
-      final overdue = taskRepo.getAll().where((t) =>
-          !t.isCompleted &&
-          DateTime(t.date.year, t.date.month, t.date.day)
-              .isBefore(todayDay)).toList();
-      if (overdue.isNotEmpty) {
-        Get.toNamed(AppRoutes.debtor);
-      }
-    } catch (_) {}
-  });
-}
-
-/// Диалог с развёрнутым еженедельным отчётом от AI
-class _WeeklyReportDialog extends StatelessWidget {
-  final String report;
-  const _WeeklyReportDialog({required this.report});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1C1C1C),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFF3A3A3A)),
-      ),
-      title: const Row(
-        children: [
-          Text('🤖', style: TextStyle(fontSize: 20)),
-          SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Итоги недели',
-              style: TextStyle(
-                color: Color(0xFFFFFFFF),
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Text(
-          report,
-          style: const TextStyle(
-            color: Color(0xFFB0B0B0),
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Get.back(),
-          child: const Text(
-            'Закрыть',
-            style: TextStyle(color: Color(0xFF888888)),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class NiteApp extends StatelessWidget {
   const NiteApp({super.key});
@@ -382,8 +141,9 @@ class NiteApp extends StatelessWidget {
       supportedLocales: const [Locale('ru', 'RU')],
       defaultTransition: Transition.cupertino,
       transitionDuration: const Duration(milliseconds: 280),
-      initialRoute: AppRoutes.home,
+      initialRoute: AppRoutes.splash,
       getPages: [
+        GetPage(name: AppRoutes.splash, page: () => const SplashScreen()),
         GetPage(name: AppRoutes.home, page: () => const HomeScreen()),
         GetPage(name: AppRoutes.settings, page: () => const SettingsScreen()),
         GetPage(
@@ -443,6 +203,10 @@ class NiteApp extends StatelessWidget {
         GetPage(
           name: AppRoutes.debtor,
           page: () => const DebtorScreen(),
+        ),
+        GetPage(
+          name: AppRoutes.logs,
+          page: () => const LogsScreen(),
         ),
       ],
     );

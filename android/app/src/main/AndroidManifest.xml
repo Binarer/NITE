@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
     <application
         android:label="nite"
         android:name="${applicationName}"
@@ -36,19 +39,6 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- NiTe Home Screen Widget -->
-        <receiver
-            android:name=".NiteWidgetProvider"
-            android:exported="true"
-            android:label="NiTe — задача"
-            android:enabled="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/nite_widget_info" />
-        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

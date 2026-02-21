@@ -86,6 +86,20 @@ class AiReportRepository {
     }
   }
 
+  /// Возвращает недельный отчёт за неделю начиная с [weekStart] (или null если нет)
+  AiReportModel? getWeeklyReport(DateTime weekStart) {
+    final day = DateTime(weekStart.year, weekStart.month, weekStart.day);
+    try {
+      return _box.values.firstWhere((r) =>
+          r.type == 'weekly' &&
+          r.date.year == day.year &&
+          r.date.month == day.month &&
+          r.date.day == day.day);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> delete(String id) async {
     await _box.delete(id);
   }

@@ -125,6 +125,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: _c.setNotificationsEnabled,
                     )),
                 const Divider(color: AppColors.border, height: 24),
+                Obx(() => SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Напоминания о задачах',
+                          style: TextStyle(color: AppColors.textPrimary)),
+                      subtitle: const Text(
+                          'Уведомление до начала задачи (если задана время)',
+                          style: TextStyle(
+                              color: AppColors.textHint, fontSize: 12)),
+                      value: _c.taskRemindersEnabled.value,
+                      onChanged: _c.setTaskRemindersEnabled,
+                    )),
+                const Divider(color: AppColors.border, height: 24),
+                // Время ежедневного отчёта
+                Row(
+                  children: [
+                    const Icon(Icons.summarize_outlined,
+                        color: AppColors.textSecondary, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Ежедневный отчёт',
+                        style: TextStyle(color: AppColors.textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'В какое время генерировать отчёт о дне',
+                    style: TextStyle(color: AppColors.textHint, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Obx(() {
+                  final selected = _c.dailyReportHour.value;
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [18, 19, 20, 21, 22, 23].map((hour) {
+                      final isSelected = selected == hour;
+                      return GestureDetector(
+                        onTap: () => _c.setDailyReportHour(hour),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.accent
+                                : AppColors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.textSecondary
+                                  : AppColors.border,
+                            ),
+                          ),
+                          child: Text(
+                            '$hour:00',
+                            style: TextStyle(
+                              color: isSelected
+                                  ? AppColors.textPrimary
+                                  : AppColors.textSecondary,
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  );
+                }),
+                const Divider(color: AppColors.border, height: 24),
                 // Выбор времени напоминания о задачах
                 Row(
                   children: [
@@ -1529,6 +1606,12 @@ class _DevToolsCardState extends State<_DevToolsCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _DevButton(
+                    icon: '📋',
+                    label: 'Журнал логов',
+                    onTap: () => Get.toNamed(AppRoutes.logs),
+                  ),
+                  const SizedBox(height: 8),
                   _DevButton(
                     icon: '🔔',
                     label: 'Тестовое уведомление (отчёт)',

@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../../core/utils/app_logger.dart';
 import '../repositories/ai_report_repository.dart';
 import '../repositories/task_repository.dart';
 import 'ai_service.dart';
@@ -10,15 +11,19 @@ class ReportService {
   factory ReportService() => _instance;
   ReportService._internal();
 
-  final _reportRepo = AiReportRepository();
+  AiReportRepository get _reportRepo => Get.find<AiReportRepository>();
 
   // ─── Генерация ежедневного отчёта ─────────────────────────────────────────
 
   Future<String?> generateDailyReport({DateTime? date}) async {
+    log.info('ReportService', 'Генерация ежедневного отчёта...');
     final settings = Get.find<SettingsService>();
     final provider = settings.aiProvider;
     final apiKey = settings.getApiKey(provider);
-    if (apiKey.isEmpty) return null;
+    if (apiKey.isEmpty) {
+      log.warning('ReportService', 'API ключ не задан — отчёт пропущен');
+      return null;
+    }
 
     final targetDate = date ?? DateTime.now();
     final taskRepo = Get.find<TaskRepository>();
@@ -68,9 +73,10 @@ $pendingList
       // Уведомление
       final short = content.length > 100 ? '${content.substring(0, 100)}...' : content;
       await NotificationService().showDailyReportNotification(short, targetDate);
-
+      log.success('ReportService', 'Ежедневный отчёт сгенерирован и отправлен');
       return content;
-    } catch (_) {
+    } on Exception catch (e, st) {
+      log.error('ReportService', 'Ошибка ежедневного отчёта: $e\n$st');
       return null;
     }
   }
@@ -78,10 +84,14 @@ $pendingList
   // ─── Генерация еженедельного отчёта ──────────────────────────────────────
 
   Future<String?> generateWeeklyReport({DateTime? weekStart}) async {
+    log.info('ReportService', 'Генерация еженедельного отчёта...');
     final settings = Get.find<SettingsService>();
     final provider = settings.aiProvider;
     final apiKey = settings.getApiKey(provider);
-    if (apiKey.isEmpty) return null;
+    if (apiKey.isEmpty) {
+      log.warning('ReportService', 'API ключ не задан — недельный отчёт пропущен');
+      return null;
+    }
 
     final taskRepo = Get.find<TaskRepository>();
     final now = weekStart ?? _lastWeekStart();
@@ -116,9 +126,10 @@ $tasksList
 
       final short = content.length > 100 ? '${content.substring(0, 100)}...' : content;
       await NotificationService().showWeeklyReportNotification(short);
-
+      log.success('ReportService', 'Еженедельный отчёт сгенерирован и отправлен');
       return content;
-    } catch (_) {
+    } on Exception catch (e, st) {
+      log.error('ReportService', 'Ошибка еженедельного отчёта: $e\n$st');
       return null;
     }
   }
@@ -143,7 +154,9 @@ $tasksList
 
   DateTime _lastWeekStart() {
     final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1 + 7));
-    return DateTime(monday.year, monday.month, monday.day);
+    // Сначала находим текущий понедельник, затем откатываемся на 7 дней назад
+    final thisMonday = now.subtract(Duration(days: now.weekday - 1));
+    final lastMonday = thisMonday.subtract(const Duration(days: 7));
+    return DateTime(lastMonday.year, lastMonday.month, lastMonday.day);
   }
 }

@@ -17,10 +17,80 @@ class FoodItemController extends GetxController {
   final RxList<FoodItemModel> allItems = <FoodItemModel>[].obs;
   final RxString searchQuery = ''.obs;
 
+  // ─── Multi-select state ───────────────────────────────────────────────────
+  final RxBool selectionMode = false.obs;
+  final RxSet<String> selectedIds = <String>{}.obs;
+  final RxBool showHidden = false.obs;
+
   List<FoodItemModel> get filteredItems {
     final q = searchQuery.value.toLowerCase();
-    if (q.isEmpty) return allItems;
-    return allItems.where((f) => f.name.toLowerCase().contains(q)).toList();
+    var items = allItems.where((f) => showHidden.value || !f.isHidden).toList();
+    if (q.isNotEmpty) items = items.where((f) => f.name.toLowerCase().contains(q)).toList();
+    return items;
+  }
+
+  /// Только видимые (не скрытые) — для meal plan и task food picker
+  List<FoodItemModel> get visibleItems =>
+      allItems.where((f) => !f.isHidden).toList();
+
+  // ─── Selection ────────────────────────────────────────────────────────────
+
+  void enterSelectionMode(String firstId) {
+    selectionMode.value = true;
+    selectedIds.clear();
+    selectedIds.add(firstId);
+  }
+
+  void exitSelectionMode() {
+    selectionMode.value = false;
+    selectedIds.clear();
+  }
+
+  void toggleSelection(String id) {
+    if (selectedIds.contains(id)) {
+      selectedIds.remove(id);
+      if (selectedIds.isEmpty) exitSelectionMode();
+    } else {
+      selectedIds.add(id);
+    }
+  }
+
+  void selectAll() {
+    selectedIds.clear();
+    selectedIds.addAll(filteredItems.map((f) => f.id));
+  }
+
+  Future<void> hideSelected() async {
+    for (final id in selectedIds.toList()) {
+      final item = _repo.getById(id);
+      if (item != null) {
+        await _repo.save(item.copyWith(isHidden: true));
+      }
+    }
+    exitSelectionMode();
+    loadItems();
+  }
+
+  Future<void> unhideSelected() async {
+    for (final id in selectedIds.toList()) {
+      final item = _repo.getById(id);
+      if (item != null) {
+        await _repo.save(item.copyWith(isHidden: false));
+      }
+    }
+    exitSelectionMode();
+    loadItems();
+  }
+
+  Future<void> deleteSelected() async {
+    for (final id in selectedIds.toList()) {
+      await deleteItem(id);
+    }
+    exitSelectionMode();
+  }
+
+  void toggleShowHidden() {
+    showHidden.value = !showHidden.value;
   }
 
   @override

@@ -53,6 +53,9 @@ class FoodItemModel extends HiveObject {
   @HiveField(5)
   MacroNutrients macros;
 
+  @HiveField(6)
+  bool isHidden;
+
   FoodItemModel({
     required this.id,
     required this.name,
@@ -60,6 +63,7 @@ class FoodItemModel extends HiveObject {
     required this.description,
     required this.calories,
     required this.macros,
+    this.isHidden = false,
   });
 
   FoodItemModel copyWith({
@@ -69,6 +73,7 @@ class FoodItemModel extends HiveObject {
     String? description,
     double? calories,
     MacroNutrients? macros,
+    bool? isHidden,
   }) {
     return FoodItemModel(
       id: id ?? this.id,
@@ -77,6 +82,7 @@ class FoodItemModel extends HiveObject {
       description: description ?? this.description,
       calories: calories ?? this.calories,
       macros: macros ?? this.macros,
+      isHidden: isHidden ?? this.isHidden,
     );
   }
 }

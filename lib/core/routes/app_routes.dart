@@ -1,4 +1,5 @@
 abstract class AppRoutes {
+  static const String splash = '/splash';
   static const String home = '/';
   static const String taskCreate = '/task/create';
   static const String taskEdit = '/task/edit';
@@ -15,4 +16,5 @@ abstract class AppRoutes {
   static const String help = '/help';
   static const String mealPlan = '/meal-plan';
   static const String debtor = '/debtor';
+  static const String logs = '/logs';
 }

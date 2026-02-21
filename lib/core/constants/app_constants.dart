@@ -25,15 +25,14 @@ class AppConstants {
   static const String contactGithub = 'https://github.com/Binarer';
 
   // Settings keys
-  static const String settingsMistralApiKey = 'mistral_api_key';
+  // Ключ 'mistral_api_key' намеренно оставлен в Hive для миграции старых данных.
+  // Новые ключи хранятся через SettingsService.getApiKey(AiProvider).
   static const String settingsTimezone = 'timezone';
   static const String settingsMenuSide = 'menu_side'; // 'left' или 'right'
   static const String settingsAiProvider = 'ai_provider';
   static const String settingsAiModel = 'ai_model';
 
-  // Mistral API
-  static const String mistralBaseUrl = 'https://api.mistral.ai/v1';
-  static const String mistralModel = 'mistral-small-latest';
+  // AI базовые URL и модели теперь хранятся в AiProvider (settings_service.dart)
 
   // Default timezone
   static const String defaultTimezone = 'Asia/Yekaterinburg';

@@ -70,13 +70,6 @@ AiProvider aiProviderFromString(String name) {
 class SettingsService {
   Box get _box => Hive.box(AppConstants.settingsBox);
 
-  String get mistralApiKey =>
-      _box.get(AppConstants.settingsMistralApiKey, defaultValue: '') as String;
-
-  Future<void> setMistralApiKey(String key) async {
-    await _box.put(AppConstants.settingsMistralApiKey, key);
-  }
-
   String get timezone =>
       _box.get(AppConstants.settingsTimezone, defaultValue: AppConstants.defaultTimezone) as String;
 
@@ -85,10 +78,18 @@ class SettingsService {
   }
 
   bool get notificationsEnabled =>
-      _box.get('notifications_enabled', defaultValue: false) as bool;
+      _box.get('notifications_enabled', defaultValue: true) as bool;
 
   Future<void> setNotificationsEnabled(bool value) async {
     await _box.put('notifications_enabled', value);
+  }
+
+  /// Включены ли напоминания о конкретных задачах (независимо от общих уведомлений)
+  bool get taskRemindersEnabled =>
+      _box.get('task_reminders_enabled', defaultValue: true) as bool;
+
+  Future<void> setTaskRemindersEnabled(bool value) async {
+    await _box.put('task_reminders_enabled', value);
   }
 
   /// За сколько минут до задачи присылать уведомление (5, 10, 15, 30)
@@ -140,18 +141,6 @@ class SettingsService {
   bool hasAiProviderBeenSet() =>
       _box.get('ai_provider_selected', defaultValue: false) as bool;
 
-  // Legacy: mistral_api_key — для обратной совместимости (не дублируем getter)
-  String legacyMistralKey() {
-    final newKey = getApiKey(AiProvider.mistral);
-    if (newKey.isNotEmpty) return newKey;
-    return _box.get(AppConstants.settingsMistralApiKey, defaultValue: '') as String;
-  }
-
-  Future<void> legacySetMistralKey(String key) async {
-    await setApiKey(AiProvider.mistral, key);
-    await _box.put(AppConstants.settingsMistralApiKey, key.trim());
-  }
-
   // ─── Учёт веса ────────────────────────────────────────────────────────────
 
   List<Map<String, dynamic>> getWeightEntries() {
@@ -180,6 +169,26 @@ class SettingsService {
   String get gender =>
       _box.get('body_gender', defaultValue: 'male') as String;
   Future<void> setGender(String v) async => await _box.put('body_gender', v);
+
+  // ─── Время ежедневного отчёта ─────────────────────────────────────────────
+
+  /// Час дня когда генерируется ежедневный отчёт (0-23), по умолчанию 20
+  int get dailyReportHour =>
+      (_box.get('daily_report_hour', defaultValue: 20) as num).toInt();
+  Future<void> setDailyReportHour(int hour) async =>
+      _box.put('daily_report_hour', hour);
+
+  // ─── Pending report notifications ─────────────────────────────────────────
+
+  bool get pendingDailyReport =>
+      _box.get('pending_daily_report', defaultValue: false) as bool;
+  Future<void> setPendingDailyReport(bool v) async =>
+      _box.put('pending_daily_report', v);
+
+  bool get pendingWeeklyReport =>
+      _box.get('pending_weekly_report', defaultValue: false) as bool;
+  Future<void> setPendingWeeklyReport(bool v) async =>
+      _box.put('pending_weekly_report', v);
 
   // ─── Должник ──────────────────────────────────────────────────────────────
 

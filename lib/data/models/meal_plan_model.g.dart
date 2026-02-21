@@ -8,7 +8,7 @@ part of 'meal_plan_model.dart';
 
 class MealEntryAdapter extends TypeAdapter<MealEntry> {
   @override
-  final int typeId = AppConstants.mealEntryTypeId;
+  final int typeId = 9;
 
   @override
   MealEntry read(BinaryReader reader) {
@@ -45,7 +45,7 @@ class MealEntryAdapter extends TypeAdapter<MealEntry> {
 
 class MealPlanModelAdapter extends TypeAdapter<MealPlanModel> {
   @override
-  final int typeId = AppConstants.mealPlanTypeId;
+  final int typeId = 8;
 
   @override
   MealPlanModel read(BinaryReader reader) {
@@ -56,17 +56,13 @@ class MealPlanModelAdapter extends TypeAdapter<MealPlanModel> {
     return MealPlanModel(
       id: fields[0] as String,
       name: fields[1] as String,
-      entries: (fields[2] as Map).map(
-        (k, v) => MapEntry(
-          k as String,
-          (v as List).cast<MealEntry>(),
-        ),
-      ),
+      entries: (fields[2] as Map?)?.map((dynamic k, dynamic v) =>
+          MapEntry(k as String, (v as List).cast<MealEntry>())),
       dailyCalorieTarget: fields[3] as double,
       dailyProteinTarget: fields[4] as double,
       dailyFatTarget: fields[5] as double,
       dailyCarbTarget: fields[6] as double,
-      createdAt: fields[7] as DateTime,
+      createdAt: fields[7] as DateTime?,
     );
   }
 

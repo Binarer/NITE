@@ -14,6 +14,7 @@ import '../repositories/food_item_repository.dart';
 import '../repositories/scenario_repository.dart';
 import '../repositories/tag_repository.dart';
 import '../repositories/task_repository.dart';
+import '../services/settings_service.dart';
 
 class ExportImportService {
   static final ExportImportService _instance = ExportImportService._internal();
@@ -78,14 +79,47 @@ class ExportImportService {
     final taskRepo = Get.find<TaskRepository>();
     final foodRepo = Get.find<FoodItemRepository>();
     final scenarioRepo = Get.find<ScenarioRepository>();
+    final settings = Get.find<SettingsService>();
 
     return {
-      'version': 1,
+      'version': 2,
       'exportedAt': DateTime.now().toIso8601String(),
       'tags': tagRepo.getAll().map(_tagToJson).toList(),
       'tasks': taskRepo.getAll().map(_taskToJson).toList(),
       'foodItems': foodRepo.getAll().map(_foodToJson).toList(),
       'scenarios': scenarioRepo.getAll().map(_scenarioToJson).toList(),
+      'settings': _settingsToJson(settings),
+    };
+  }
+
+  Map<String, dynamic> _settingsToJson(SettingsService s) {
+    // Собираем ключи и модели для всех провайдеров
+    final apiKeys = <String, String>{};
+    final aiModels = <String, String>{};
+    for (final p in AiProvider.values) {
+      final key = s.getApiKey(p);
+      final model = s.getModel(p);
+      if (key.isNotEmpty) apiKeys[p.name] = key;
+      if (model.isNotEmpty) aiModels[p.name] = model;
+    }
+
+    return {
+      'notificationsEnabled': s.notificationsEnabled,
+      'taskRemindersEnabled': s.taskRemindersEnabled,
+      'taskReminderMinutes': s.taskReminderMinutes,
+      'debtorEnabled': s.debtorEnabled,
+      'debtorAiHints': s.debtorAiHints,
+      'timezone': s.timezone,
+      'aiProvider': s.aiProvider.name,
+      'apiKeys': apiKeys,
+      'aiModels': aiModels,
+      'heightCm': s.heightCm,
+      'age': s.age,
+      'gender': s.gender,
+      'dailyCalories': s.dailyCalories,
+      'dailyProtein': s.dailyProtein,
+      'dailyFat': s.dailyFat,
+      'dailyCarbs': s.dailyCarbs,
     };
   }
 
@@ -164,6 +198,76 @@ class ExportImportService {
       final taskRepo = Get.find<TaskRepository>();
       final foodRepo = Get.find<FoodItemRepository>();
       final scenarioRepo = Get.find<ScenarioRepository>();
+      final settings = Get.find<SettingsService>();
+
+      // Настройки (только если есть в файле — версия 2+)
+      if (data.containsKey('settings')) {
+        final s = data['settings'] as Map<String, dynamic>;
+        if (s.containsKey('notificationsEnabled')) {
+          await settings.setNotificationsEnabled(s['notificationsEnabled'] as bool);
+        }
+        if (s.containsKey('taskRemindersEnabled')) {
+          await settings.setTaskRemindersEnabled(s['taskRemindersEnabled'] as bool);
+        }
+        if (s.containsKey('taskReminderMinutes')) {
+          await settings.setTaskReminderMinutes(s['taskReminderMinutes'] as int);
+        }
+        if (s.containsKey('debtorEnabled')) {
+          await settings.setDebtorEnabled(s['debtorEnabled'] as bool);
+        }
+        if (s.containsKey('debtorAiHints')) {
+          await settings.setDebtorAiHints(s['debtorAiHints'] as bool);
+        }
+        if (s.containsKey('timezone') && (s['timezone'] as String).isNotEmpty) {
+          await settings.setTimezone(s['timezone'] as String);
+        }
+        if (s.containsKey('aiProvider') && (s['aiProvider'] as String).isNotEmpty) {
+          await settings.setAiProvider(aiProviderFromString(s['aiProvider'] as String));
+        }
+        // Ключи и модели по провайдерам
+        if (s.containsKey('apiKeys')) {
+          final keys = s['apiKeys'] as Map<String, dynamic>;
+          for (final entry in keys.entries) {
+            final provider = aiProviderFromString(entry.key);
+            if ((entry.value as String).isNotEmpty) {
+              await settings.setApiKey(provider, entry.value as String);
+            }
+          }
+        }
+        if (s.containsKey('aiModels')) {
+          final models = s['aiModels'] as Map<String, dynamic>;
+          for (final entry in models.entries) {
+            final provider = aiProviderFromString(entry.key);
+            if ((entry.value as String).isNotEmpty) {
+              await settings.setModel(provider, entry.value as String);
+            }
+          }
+        }
+        // Профиль тела
+        if (s.containsKey('heightCm')) {
+          await settings.setHeightCm((s['heightCm'] as num).toDouble());
+        }
+        if (s.containsKey('age')) {
+          await settings.setAge((s['age'] as num).toInt());
+        }
+        if (s.containsKey('gender') && (s['gender'] as String).isNotEmpty) {
+          await settings.setGender(s['gender'] as String);
+        }
+        // Нормы питания
+        if (s.containsKey('dailyCalories')) {
+          await settings.setDailyCalories((s['dailyCalories'] as num).toDouble());
+        }
+        if (s.containsKey('dailyProtein')) {
+          await settings.setDailyProtein((s['dailyProtein'] as num).toDouble());
+        }
+        if (s.containsKey('dailyFat')) {
+          await settings.setDailyFat((s['dailyFat'] as num).toDouble());
+        }
+        if (s.containsKey('dailyCarbs')) {
+          await settings.setDailyCarbs((s['dailyCarbs'] as num).toDouble());
+        }
+        imported++;
+      }
 
       // Теги
       for (final t in (data['tags'] as List? ?? [])) {

@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NiTe</string>
-    <string name="nite_widget_description">Показывает ближайшую предстоящую задачу</string>
-    <string name="nite_widget_no_tasks">Нет предстоящих задач</string>
 </resources>

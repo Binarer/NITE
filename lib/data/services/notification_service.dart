@@ -1,297 +1,178 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:get/get.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
+import 'package:timezone/timezone.dart' as tzz;
+
+import '../../core/utils/app_logger.dart';
 import '../repositories/task_repository.dart';
+
+// ─── Notification channel keys ────────────────────────────────────────────────
+const _chTask = 'task_reminder';
+const _chWeekly = 'weekly_retro';
+const _chDaily = 'daily_report';
+
+// ─── Notification IDs ─────────────────────────────────────────────────────────
+const _idWeeklyRetro = 1;
+const _idWeeklyShow = 2;
+const _idDailySchedule = 3;
+const _idDailyShow = 4;
+const _idTest = 99;
+
+// ─── Action keys ──────────────────────────────────────────────────────────────
+const _keyComplete = 'task_complete';
+const _keySnooze = 'task_snooze';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _plugin =
-      FlutterLocalNotificationsPlugin();
-
   bool _initialized = false;
+  String _timezone = 'Asia/Yekaterinburg';
 
-  // Notification IDs
-  // ignore: unused_field
-  static const int _weeklyRetroId = 1;
-  static const int _weeklyReportShowId = 2;
-  static const int _dailyReportScheduleId = 3;
-  static const int _dailyReportShowId = 4;
-  static const int _testNotificationId = 99;
-  // Task reminders используют ID = 1000 + хэш от task id (по модулю 10000)
-  static const int _taskReminderBaseId = 1000;
+  // Exposed for background handler
+  static const String actionComplete = _keyComplete;
 
-  // Action IDs
-  static const String _actionComplete = 'task_complete';
-  static const String _actionSnooze = 'task_snooze';
+  // ─── Init ──────────────────────────────────────────────────────────────────
 
   Future<void> init() async {
     if (_initialized) return;
 
-    // Инициализация timezone — по умолчанию Екатеринбург (GMT+5)
     tz.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Asia/Yekaterinburg'));
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+    await AwesomeNotifications().initialize(
+      null, // null = use default app icon
+      [
+        NotificationChannel(
+          channelKey: _chTask,
+          channelName: 'Напоминания о задачах',
+          channelDescription: 'Напоминания о предстоящих задачах',
+          importance: NotificationImportance.High,
+          defaultRingtoneType: DefaultRingtoneType.Notification,
+          locked: false,
+          channelShowBadge: true,
+        ),
+        NotificationChannel(
+          channelKey: _chWeekly,
+          channelName: 'Еженедельная ретроспектива',
+          channelDescription: 'Еженедельный отчёт о продуктивности от NiTe',
+          importance: NotificationImportance.High,
+          channelShowBadge: true,
+        ),
+        NotificationChannel(
+          channelKey: _chDaily,
+          channelName: 'Ежедневный отчёт',
+          channelDescription: 'Итоги дня от NiTe AI',
+          importance: NotificationImportance.High,
+          channelShowBadge: true,
+        ),
+      ],
+      debug: false,
     );
-    const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _plugin.initialize(
-      settings,
-      onDidReceiveNotificationResponse: _onNotificationAction,
-      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationAction,
-    );
-
-    // Запросить разрешения на Android 13+
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-
-    // Запросить разрешение на точные будильники (Android 12+)
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestExactAlarmsPermission();
 
     _initialized = true;
+    log.success('NotificationService', 'Инициализирован');
   }
 
-  /// Устанавливает часовой пояс для уведомлений
+  // ─── Permissions ───────────────────────────────────────────────────────────
+
+  Future<bool> requestPermissions() async {
+    final allowed = await AwesomeNotifications().isNotificationAllowed();
+    if (!allowed) {
+      return await AwesomeNotifications().requestPermissionToSendNotifications();
+    }
+    return true;
+  }
+
+  // ─── Timezone ──────────────────────────────────────────────────────────────
+
   Future<void> setTimezone(String timezone) async {
     try {
-      tz.setLocalLocation(tz.getLocation(timezone));
+      tzz.setLocalLocation(tzz.getLocation(timezone));
+      _timezone = timezone;
     } catch (_) {
-      // Если пояс не найден — оставляем системный
+      try {
+        tzz.setLocalLocation(tzz.getLocation('Asia/Yekaterinburg'));
+        _timezone = 'Asia/Yekaterinburg';
+      } catch (_) {}
     }
   }
 
-  /// Запланировать еженедельную ретроспективу (каждый ПН в 12:00 по local tz)
-  Future<void> scheduleWeeklyRetrospective() async {
-    // Отменяем предыдущее расписание
-    await _plugin.cancel(1);
+  // ─── Action listener ───────────────────────────────────────────────────────
 
-    const androidDetails = AndroidNotificationDetails(
-      'weekly_retro',
-      'Еженедельная ретроспектива',
-      channelDescription: 'Еженедельный отчёт о продуктивности от NiTe',
-      importance: Importance.high,
-      priority: Priority.high,
-      styleInformation: BigTextStyleInformation(''),
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _plugin.zonedSchedule(
-      1,
-      'NiTe — Еженедельный отчёт',
-      'Ваша недельная статистика готова. Откройте приложение, чтобы посмотреть.',
-      _nextMondayAt12(),
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+  /// Вызвать один раз в main() или SplashScreen после init()
+  void setActionListener() {
+    AwesomeNotifications().setListeners(
+      onActionReceivedMethod: _onActionReceived,
     );
   }
 
-  /// Отменить еженедельное расписание
-  Future<void> cancelWeeklyRetrospective() async {
-    await _plugin.cancel(1);
-  }
+  @pragma('vm:entry-point')
+  static Future<void> _onActionReceived(ReceivedAction action) async {
+    final taskId = action.payload?['taskId'];
+    if (taskId == null) return;
 
-  /// Показать немедленное уведомление (для ретроспективы)
-  Future<void> showRetrospectiveNotification(String summary) async {
-    const androidDetails = AndroidNotificationDetails(
-      'weekly_retro',
-      'Еженедельная ретроспектива',
-      channelDescription: 'Еженедельный отчёт о продуктивности от NiTe',
-      importance: Importance.high,
-      priority: Priority.high,
-      styleInformation: BigTextStyleInformation(''),
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _plugin.show(
-      2,
-      'NiTe — Еженедельный отчёт',
-      summary,
-      details,
-    );
-  }
-
-  Future<void> cancelAll() async {
-    await _plugin.cancelAll();
-  }
-
-  // ─── Ежедневный отчёт (22:00 каждый день) ────────────────────────────────
-
-  /// Планирует ежедневное уведомление-триггер в 22:00
-  Future<void> scheduleDailyReport() async {
-    await _plugin.cancel(_dailyReportScheduleId);
-
-    const androidDetails = AndroidNotificationDetails(
-      'daily_report',
-      'Ежедневный отчёт',
-      channelDescription: 'Итоги дня от NiTe AI',
-      importance: Importance.high,
-      priority: Priority.high,
-      styleInformation: BigTextStyleInformation(''),
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    await _plugin.zonedSchedule(
-      _dailyReportScheduleId,
-      'NiTe — Итоги дня',
-      'Подводим итоги... Откройте приложение для отчёта.',
-      _nextTimeAt(22, 0),
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
-  }
-
-  /// Отменяет ежедневный отчёт
-  Future<void> cancelDailyReport() async {
-    await _plugin.cancel(_dailyReportScheduleId);
-  }
-
-  /// Показывает мгновенное уведомление с текстом ежедневного отчёта
-  Future<void> showDailyReportNotification(String summary, DateTime date) async {
-    const androidDetails = AndroidNotificationDetails(
-      'daily_report',
-      'Ежедневный отчёт',
-      channelDescription: 'Итоги дня от NiTe AI',
-      importance: Importance.high,
-      priority: Priority.high,
-      styleInformation: BigTextStyleInformation(''),
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    await _plugin.show(
-      _dailyReportShowId,
-      'NiTe — Итоги дня',
-      summary,
-      details,
-    );
-  }
-
-  /// Показывает мгновенное уведомление с текстом еженедельного отчёта
-  Future<void> showWeeklyReportNotification(String summary) async {
-    const androidDetails = AndroidNotificationDetails(
-      'weekly_retro',
-      'Еженедельная ретроспектива',
-      channelDescription: 'Еженедельный отчёт о продуктивности от NiTe',
-      importance: Importance.high,
-      priority: Priority.high,
-      styleInformation: BigTextStyleInformation(''),
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    await _plugin.show(
-      _weeklyReportShowId,
-      'NiTe — Итоги недели',
-      summary,
-      details,
-    );
-  }
-
-  // ─── Напоминания о конкретных задачах ────────────────────────────────────
-
-  /// Обработчик нажатий на уведомление / action buttons
-  void _onNotificationAction(NotificationResponse response) async {
-    final payload = response.payload; // taskId
-    final actionId = response.actionId;
-
-    if (payload == null) return;
-
-    if (actionId == _actionComplete) {
-      // Отметить задачу выполненной
+    if (action.buttonKeyPressed == 'task_open') {
+      // ActionType.Default уже поднимает приложение на передний план,
+      // дополнительно навигируем на экран задачи
       try {
-        final repo = Get.find<TaskRepository>();
-        final task = repo.getById(payload);
-        if (task != null) {
-          final updated = task.copyWith(isCompleted: true);
-          await repo.save(updated);
-        }
+        Get.toNamed('/task/detail', arguments: taskId);
       } catch (_) {}
-    } else if (actionId == _actionSnooze) {
-      // Отложить на 15 минут — показываем новое уведомление через 15 мин
+    } else if (action.buttonKeyPressed == _keySnooze) {
+      // Откладываем на 15 минут
       try {
         final repo = Get.find<TaskRepository>();
-        final task = repo.getById(payload);
+        final task = repo.getById(taskId);
         if (task != null) {
-          final notifId = _taskReminderBaseId + payload.hashCode.abs() % 10000;
-          final snoozeAt = tz.TZDateTime.now(tz.local)
-              .add(const Duration(minutes: 15));
-
-          final androidDetails = AndroidNotificationDetails(
-            'task_reminder',
-            'Напоминания о задачах',
-            channelDescription: 'Напоминания о предстоящих задачах',
-            importance: Importance.high,
-            priority: Priority.high,
-            actions: _taskActions(),
-          );
-          final details = NotificationDetails(android: androidDetails);
-
-          await _plugin.zonedSchedule(
-            notifId + 1,
-            '⏰ Отложено (+15 мин)',
-            task.name,
-            snoozeAt,
-            details,
-            payload: payload,
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
+          final snoozeAt = DateTime.now().add(const Duration(minutes: 15));
+          await AwesomeNotifications().createNotification(
+            content: NotificationContent(
+              id: _notifIdForTask(taskId) + 1,
+              channelKey: _chTask,
+              title: '⏰ Отложено (+15 мин)',
+              body: task.name,
+              payload: {'taskId': taskId},
+              notificationLayout: NotificationLayout.Default,
+            ),
+            schedule: NotificationCalendar.fromDate(
+              date: snoozeAt,
+              allowWhileIdle: true,
+              preciseAlarm: true,
+            ),
+            actionButtons: _taskActionButtons(),
           );
         }
       } catch (_) {}
     }
   }
 
-  List<AndroidNotificationAction> _taskActions() => [
-        const AndroidNotificationAction(
-          _actionComplete,
-          '✅ Выполнить',
-          showsUserInterface: false,
-          cancelNotification: true,
+  // ─── Helper ────────────────────────────────────────────────────────────────
+
+  static int _notifIdForTask(String taskId) {
+    var hash = 0;
+    for (final c in taskId.codeUnits) {
+      hash = (hash * 31 + c) & 0x7FFFFFFF;
+    }
+    return 1000 + (hash % 9000) + 1;
+  }
+
+  static List<NotificationActionButton> _taskActionButtons() => [
+        NotificationActionButton(
+          key: 'task_open',
+          label: '📋 Открыть',
+          actionType: ActionType.Default,
+          autoDismissible: true,
         ),
-        const AndroidNotificationAction(
-          _actionSnooze,
-          '⏰ +15 мин',
-          showsUserInterface: false,
-          cancelNotification: true,
+        NotificationActionButton(
+          key: _keySnooze,
+          label: '⏰ +15 мин',
+          actionType: ActionType.SilentBackgroundAction,
+          autoDismissible: true,
         ),
       ];
 
-  /// Планирует напоминание о задаче за [minutesBefore] минут до startMinutes.
-  /// [taskId] — уникальный ID задачи, [taskName] — название,
-  /// [date] — дата задачи, [startMinutes] — время начала (часы*60+минуты).
+  // ─── Task reminders ────────────────────────────────────────────────────────
+
   Future<void> scheduleTaskReminder({
     required String taskId,
     required String taskName,
@@ -301,151 +182,231 @@ class NotificationService {
   }) async {
     if (!_initialized) await init();
 
-    // Вычисляем числовой ID из taskId (стабильный хэш, влезающий в int)
-    final notifId = _taskReminderBaseId + taskId.hashCode.abs() % 10000;
+    final notifId = _notifIdForTask(taskId);
 
-    // Отменяем предыдущее расписание для этой задачи
-    await _plugin.cancel(notifId);
+    // Отменяем предыдущее
+    await AwesomeNotifications().cancel(notifId);
 
-    // Время старта задачи
-    final taskStart = tz.TZDateTime(
-      tz.local,
+    // Вычисляем время уведомления
+    final taskStart = DateTime(
       date.year,
       date.month,
       date.day,
       startMinutes ~/ 60,
       startMinutes % 60,
     );
-
-    // Уведомление за N минут до начала
     final notifyAt = taskStart.subtract(Duration(minutes: minutesBefore));
 
-    // Не планируем уведомление в прошлом
-    if (notifyAt.isBefore(tz.TZDateTime.now(tz.local))) return;
+    if (notifyAt.isBefore(DateTime.now())) {
+      log.warning('NotificationService',
+          'Напоминание для "$taskName" не запланировано — время в прошлом');
+      return;
+    }
 
-    final androidDetails = AndroidNotificationDetails(
-      'task_reminder',
-      'Напоминания о задачах',
-      channelDescription: 'Напоминания о предстоящих задачах',
-      importance: Importance.high,
-      priority: Priority.high,
-      actions: _taskActions(),
+    final minutesLabel = minutesBefore == 1 ? '1 минуту' : '$minutesBefore минут';
+
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: notifId,
+        channelKey: _chTask,
+        title: '⏰ Напоминание',
+        body: 'Через $minutesLabel: $taskName',
+        payload: {'taskId': taskId},
+        notificationLayout: NotificationLayout.Default,
+        wakeUpScreen: true,
+        category: NotificationCategory.Reminder,
+      ),
+      schedule: NotificationCalendar(
+        year: notifyAt.year,
+        month: notifyAt.month,
+        day: notifyAt.day,
+        hour: notifyAt.hour,
+        minute: notifyAt.minute,
+        second: 0,
+        millisecond: 0,
+        allowWhileIdle: true,
+        preciseAlarm: true,
+        timeZone: _timezone,
+      ),
+      actionButtons: _taskActionButtons(),
     );
-    const iosDetails = DarwinNotificationDetails();
-    final details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
 
-    final minutesLabel = minutesBefore == 1
-        ? '1 минуту'
-        : '$minutesBefore минут';
-
-    await _plugin.zonedSchedule(
-      notifId,
-      '⏰ Напоминание',
-      'Через $minutesLabel: $taskName',
-      notifyAt,
-      details,
-      payload: taskId,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
+    final h = notifyAt.hour.toString().padLeft(2, '0');
+    final m = notifyAt.minute.toString().padLeft(2, '0');
+    log.success(
+      'NotificationService',
+      'Напоминание запланировано: "$taskName" в $h:$m (за $minutesBefore мин до начала)',
     );
   }
 
-  /// Отменяет напоминание для конкретной задачи по её ID
   Future<void> cancelTaskReminder(String taskId) async {
-    final notifId = _taskReminderBaseId + taskId.hashCode.abs() % 10000;
-    await _plugin.cancel(notifId);
+    await AwesomeNotifications().cancel(_notifIdForTask(taskId));
   }
 
-  // ─── Тестовые уведомления (для раздела "Для разработчиков") ──────────────
+  Future<void> rescheduleAllReminders(dynamic settings) async {
+    try {
+      await setTimezone(settings.timezone as String? ?? 'Asia/Yekaterinburg');
+
+      final taskRepo = Get.find<TaskRepository>();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final minutesBefore = (settings.taskReminderMinutes as int?) ?? 15;
+
+      final futureTasks = taskRepo.getAll().where((t) {
+        if (t.startMinutes == null) return false;
+        if (t.isCompleted) return false;
+        final taskDay = DateTime(t.date.year, t.date.month, t.date.day);
+        if (taskDay.isBefore(today)) return false;
+        if (taskDay.isAtSameMomentAs(today)) {
+          final notifyMinutes = t.startMinutes! - minutesBefore;
+          final notifyTime = today.add(Duration(minutes: notifyMinutes));
+          if (notifyTime.isBefore(now)) return false;
+        }
+        return true;
+      }).toList();
+
+      int scheduled = 0;
+      for (final task in futureTasks) {
+        await scheduleTaskReminder(
+          taskId: task.id,
+          taskName: task.name,
+          date: task.date,
+          startMinutes: task.startMinutes!,
+          minutesBefore: minutesBefore,
+        );
+        scheduled++;
+      }
+
+      if (scheduled > 0) {
+        log.success('NotificationService', 'Перепланировано напоминаний: $scheduled');
+      }
+    } catch (e) {
+      log.error('NotificationService', 'Ошибка перепланирования: $e');
+    }
+  }
+
+  // ─── Weekly retrospective ──────────────────────────────────────────────────
+
+  Future<void> scheduleWeeklyRetrospective() async {
+    await AwesomeNotifications().cancel(_idWeeklyRetro);
+
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _idWeeklyRetro,
+        channelKey: _chWeekly,
+        title: 'NiTe — Еженедельный отчёт',
+        body: 'Ваша недельная статистика готова. Откройте приложение.',
+        notificationLayout: NotificationLayout.Default,
+        category: NotificationCategory.Reminder,
+        wakeUpScreen: true,
+      ),
+      schedule: NotificationCalendar(
+        weekday: DateTime.monday,
+        hour: 12,
+        minute: 0,
+        second: 0,
+        millisecond: 0,
+        repeats: true,
+        allowWhileIdle: true,
+        timeZone: _timezone,
+      ),
+    );
+    log.success('NotificationService',
+        'Еженедельная ретроспектива запланирована (ПН 12:00)');
+  }
+
+  Future<void> cancelWeeklyRetrospective() async {
+    await AwesomeNotifications().cancel(_idWeeklyRetro);
+  }
+
+  Future<void> showRetrospectiveNotification(String summary) async {
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _idWeeklyShow,
+        channelKey: _chWeekly,
+        title: 'NiTe — Итоги недели',
+        body: summary,
+        notificationLayout: NotificationLayout.BigText,
+      ),
+    );
+  }
+
+  Future<void> showWeeklyReportNotification(String summary) =>
+      showRetrospectiveNotification(summary);
+
+  // ─── Daily report ──────────────────────────────────────────────────────────
+
+  Future<void> scheduleDailyReport() async {
+    await AwesomeNotifications().cancel(_idDailySchedule);
+
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _idDailySchedule,
+        channelKey: _chDaily,
+        title: 'NiTe — Итоги дня',
+        body: 'Подводим итоги... Откройте приложение для отчёта.',
+        notificationLayout: NotificationLayout.Default,
+        category: NotificationCategory.Reminder,
+        wakeUpScreen: true,
+      ),
+      schedule: NotificationCalendar(
+        hour: 22,
+        minute: 0,
+        second: 0,
+        millisecond: 0,
+        repeats: true,
+        allowWhileIdle: true,
+        timeZone: _timezone,
+      ),
+    );
+    log.success('NotificationService', 'Ежедневный отчёт запланирован (22:00)');
+  }
+
+  Future<void> cancelDailyReport() async {
+    await AwesomeNotifications().cancel(_idDailySchedule);
+  }
+
+  Future<void> showDailyReportNotification(String summary, DateTime date) async {
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _idDailyShow,
+        channelKey: _chDaily,
+        title: 'NiTe — Итоги дня',
+        body: summary,
+        notificationLayout: NotificationLayout.BigText,
+      ),
+    );
+  }
+
+  // ─── Cancel all ────────────────────────────────────────────────────────────
+
+  Future<void> cancelAll() async {
+    await AwesomeNotifications().cancelAll();
+  }
+
+  // ─── Test notifications ────────────────────────────────────────────────────
 
   Future<void> sendTestReportNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'daily_report',
-      'Ежедневный отчёт',
-      channelDescription: 'Итоги дня от NiTe AI',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    await _plugin.show(
-      _testNotificationId,
-      '🧪 Тестовый отчёт',
-      'Это тестовое уведомление с отчётом. Всё работает корректно!',
-      details,
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _idTest,
+        channelKey: _chDaily,
+        title: '🧪 Тестовый отчёт',
+        body: 'Это тестовое уведомление с отчётом. Всё работает корректно!',
+        notificationLayout: NotificationLayout.Default,
+      ),
     );
   }
 
   Future<void> sendTestReminderNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'task_reminder',
-      'Напоминания о задачах',
-      channelDescription: 'Напоминания о предстоящих задачах',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-
-    await _plugin.show(
-      _testNotificationId,
-      '⏰ Напоминание о задаче',
-      'Тестовое напоминание: "Завершить важный проект" через 30 минут',
-      details,
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: _idTest,
+        channelKey: _chTask,
+        title: '⏰ Напоминание о задаче',
+        body: 'Тестовое напоминание: "Завершить важный проект" через 30 минут',
+        notificationLayout: NotificationLayout.Default,
+      ),
     );
   }
-
-  /// Вычисляет следующий понедельник 12:00 в текущем часовом поясе
-
-  tz.TZDateTime _nextMondayAt12() {
-    final now = tz.TZDateTime.now(tz.local);
-    // weekday: 1=ПН, 7=ВС
-    int daysUntilMonday = DateTime.monday - now.weekday;
-    if (daysUntilMonday < 0) daysUntilMonday += 7;
-
-    var scheduled = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day + daysUntilMonday,
-      12,
-      0,
-    );
-
-    // Если сегодня ПН и уже после 12:00 — планируем на следующий ПН
-    if (scheduled.isBefore(now) || scheduled.isAtSameMomentAs(now)) {
-      scheduled = scheduled.add(const Duration(days: 7));
-    }
-
-    return scheduled;
-  }
-
-  /// Вычисляет следующее наступление заданного времени (hour:minute) каждый день
-  tz.TZDateTime _nextTimeAt(int hour, int minute) {
-    final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
-    );
-    if (scheduled.isBefore(now) || scheduled.isAtSameMomentAs(now)) {
-      scheduled = scheduled.add(const Duration(days: 1));
-    }
-    return scheduled;
-  }
-}
-
-/// Фоновый обработчик action buttons (top-level функция, обязательно)
-@pragma('vm:entry-point')
-void _onBackgroundNotificationAction(NotificationResponse response) {
-  // Фоновые действия обрабатываются при следующем запуске приложения
-  // Здесь можно логировать или сохранять состояние через SharedPreferences
 }
