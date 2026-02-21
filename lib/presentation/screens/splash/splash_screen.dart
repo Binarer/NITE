@@ -7,6 +7,7 @@ import '../../../data/repositories/ai_report_repository.dart';
 import '../../../data/repositories/task_repository.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/services/settings_service.dart';
+import '../../../data/services/update_service.dart';
 
 /// Экран загрузки — показывается при каждом запуске приложения.
 /// Перепланирует все уведомления и переходит на главный экран.
@@ -88,6 +89,9 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 300));
 
     final settings = Get.find<SettingsService>();
+
+    // Проверяем обновления в фоне (silent — не показывает ошибки)
+    UpdateService().checkForUpdate(silent: true);
 
     // Показываем экран должника если есть просрочки
     _maybeShowDebtor(settings);

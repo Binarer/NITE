@@ -9,6 +9,7 @@ import '../../../data/services/export_import_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/services/report_service.dart';
 import '../../../data/services/settings_service.dart';
+import '../../../data/services/update_service.dart';
 import '../../controllers/food_item_controller.dart';
 import '../../controllers/settings_controller.dart';
 
@@ -476,6 +477,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // --- Экспорт / Импорт ---
           _SectionHeader('Данные'),
           _ExportImportCard(),
+          const SizedBox(height: 20),
+
+          // --- Обновления ---
+          _SectionHeader('Обновления'),
+          _SettingsCard(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.system_update_outlined, color: AppColors.textSecondary),
+              title: const Text('Проверить обновления',
+                  style: TextStyle(color: AppColors.textPrimary)),
+              subtitle: const Text('Текущая версия: 1.2.1',
+                  style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
+              onTap: () => UpdateService().checkForUpdate(silent: false),
+            ),
+          ),
           const SizedBox(height: 20),
 
           // --- Для разработчиков ---
