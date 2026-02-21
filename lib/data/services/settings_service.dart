@@ -180,4 +180,44 @@ class SettingsService {
   String get gender =>
       _box.get('body_gender', defaultValue: 'male') as String;
   Future<void> setGender(String v) async => await _box.put('body_gender', v);
+
+  // ─── Должник ──────────────────────────────────────────────────────────────
+
+  /// Включён ли экран "Должник" при запуске
+  bool get debtorEnabled =>
+      _box.get('debtor_enabled', defaultValue: true) as bool;
+  Future<void> setDebtorEnabled(bool v) async =>
+      await _box.put('debtor_enabled', v);
+
+  /// Включены ли AI-подсказки в "Должнике"
+  bool get debtorAiHints =>
+      _box.get('debtor_ai_hints', defaultValue: true) as bool;
+  Future<void> setDebtorAiHints(bool v) async =>
+      await _box.put('debtor_ai_hints', v);
+
+  // ─── Нормы питания КБЖУ ───────────────────────────────────────────────────
+
+  /// Дневная норма калорий (ккал)
+  double get dailyCalories =>
+      (_box.get('nutrition_calories', defaultValue: 2000.0) as num).toDouble();
+  Future<void> setDailyCalories(double v) async =>
+      await _box.put('nutrition_calories', v);
+
+  /// Дневная норма белков (г)
+  double get dailyProtein =>
+      (_box.get('nutrition_protein', defaultValue: 100.0) as num).toDouble();
+  Future<void> setDailyProtein(double v) async =>
+      await _box.put('nutrition_protein', v);
+
+  /// Дневная норма жиров (г)
+  double get dailyFat =>
+      (_box.get('nutrition_fat', defaultValue: 70.0) as num).toDouble();
+  Future<void> setDailyFat(double v) async =>
+      await _box.put('nutrition_fat', v);
+
+  /// Дневная норма углеводов (г)
+  double get dailyCarbs =>
+      (_box.get('nutrition_carbs', defaultValue: 250.0) as num).toDouble();
+  Future<void> setDailyCarbs(double v) async =>
+      await _box.put('nutrition_carbs', v);
 }

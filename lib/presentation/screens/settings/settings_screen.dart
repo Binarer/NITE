@@ -4,8 +4,8 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/food_item_model.dart';
-import '../../../data/repositories/ai_report_repository.dart';
 import '../../../data/repositories/food_item_repository.dart';
+import '../../../data/services/export_import_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/services/report_service.dart';
 import '../../../data/services/settings_service.dart';
@@ -35,16 +35,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiKeyCtr = TextEditingController(text: _c.currentApiKey.value);
     _modelCtr = TextEditingController(text: _c.currentModel.value);
 
-    // Если провайдер уже выбран и ключ сохранён — сразу на шаг 2
-    if (_c.currentApiKey.value.isNotEmpty) {
-      _aiStep.value = _c.keyTestResult.value == true ? 2 : 1;
+    // Если провайдер уже выбран и ключ сохранён — сразу на шаг модели (3)
+    if (_c.hasProviderBeenSelected.value) {
+      if (_c.currentApiKey.value.isNotEmpty) {
+        _aiStep.value = 3; // ключ есть — доверяем, сразу к модели
+      } else {
+        _aiStep.value = 1; // провайдер выбран, но ключа нет
+      }
     }
 
     ever(_c.aiProvider, (_) {
       _apiKeyCtr.text = _c.currentApiKey.value;
       _modelCtr.text = _c.currentModel.value;
       // При смене провайдера сбрасываем на шаг ключа
-      _aiStep.value = _c.currentApiKey.value.isNotEmpty ? 1 : 0;
+      _aiStep.value = _c.currentApiKey.value.isNotEmpty ? 3 : 1;
     });
     ever(_c.currentApiKey, (v) {
       if (_apiKeyCtr.text != v) _apiKeyCtr.text = v;
@@ -54,7 +58,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     // После успешной проверки ключа — переходим к выбору модели
     ever(_c.keyTestResult, (result) {
-      if (result == true) _aiStep.value = 2;
+      if (result == true) _aiStep.value = 3;
     });
   }
 
@@ -382,6 +386,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 24),
 
+          // --- Нормы питания ---
+          _SectionHeader('Нормы питания'),
+          _NutritionGoalsCard(),
+          const SizedBox(height: 20),
+
+          // --- Должник ---
+          _SectionHeader('Должник'),
+          _DebtorSettingsCard(),
+          const SizedBox(height: 20),
+
+          // --- Экспорт / Импорт ---
+          _SectionHeader('Данные'),
+          _ExportImportCard(),
+          const SizedBox(height: 20),
+
           // --- Для разработчиков ---
           _SectionHeader('Для разработчиков'),
           _DevToolsCard(),
@@ -398,7 +417,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.bold,
                         letterSpacing: 3)),
                 SizedBox(height: 4),
-                Text('v1.0.0',
+                Text('v1.2.0',
                     style: TextStyle(
                         color: AppColors.textHint, fontSize: 12)),
               ],
@@ -450,7 +469,7 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
-// ─── AI Setup Card (шаговый: провайдер → ключ → модель) ─────────────────────
+// ─── AI Setup Card (шаговый: провайдер → ключ → проверка → модель) ──────────
 
 class _AiSetupCard extends StatelessWidget {
   final SettingsController c;
@@ -491,7 +510,7 @@ class _AiSetupCard extends StatelessWidget {
 
             // Шаг 0: Выбор провайдера
             _AnimatedStep(
-              visible: true, // всегда виден
+              visible: true, // шаг 0 всегда виден (провайдер можно менять)
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -508,7 +527,7 @@ class _AiSetupCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Obx(() => DropdownButtonFormField<AiProvider?>(
-                    value: c.hasProviderBeenSelected.value
+                    initialValue: c.hasProviderBeenSelected.value
                         ? c.aiProvider.value
                         : null,
                     dropdownColor: AppColors.surfaceVariant,
@@ -556,7 +575,7 @@ class _AiSetupCard extends StatelessWidget {
               ),
             ),
 
-            // Шаг 1: Ввод и проверка ключа
+            // Шаг 1: Ввод API ключа
             _AnimatedStep(
               visible: step >= 1,
               child: Column(
@@ -569,11 +588,21 @@ class _AiSetupCard extends StatelessWidget {
                     children: [
                       _stepBadge(2, step >= 1),
                       const SizedBox(width: 8),
-                      const Text('API ключ',
-                          style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                      const Expanded(
+                        child: Text('API ключ',
+                            style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      // Кнопка назад
+                      if (step == 1)
+                        GestureDetector(
+                          onTap: () => aiStep.value = 0,
+                          child: const Text('← Назад',
+                              style: TextStyle(
+                                  color: AppColors.textHint, fontSize: 11)),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -596,6 +625,12 @@ class _AiSetupCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Obx(() => Text(
+                        'Получите ключ на сайте ${c.aiProvider.value.displayName}',
+                        style: const TextStyle(
+                            color: AppColors.textHint, fontSize: 11),
+                      )),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -609,7 +644,10 @@ class _AiSetupCard extends StatelessWidget {
                               ),
                               onPressed: c.isSavingKey.value
                                   ? null
-                                  : () => c.saveApiKey(apiKeyCtr.text),
+                                  : () async {
+                                      await c.saveApiKey(apiKeyCtr.text);
+                                      aiStep.value = 2;
+                                    },
                               child: c.isSavingKey.value
                                   ? const SizedBox(
                                       width: 16,
@@ -617,62 +655,16 @@ class _AiSetupCard extends StatelessWidget {
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2,
                                           color: AppColors.textSecondary))
-                                  : const Text('Сохранить'),
-                            )),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Obx(() => ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    c.keyTestResult.value == true
-                                        ? const Color(0xFF1A3A1A)
-                                        : c.keyTestResult.value == false
-                                            ? const Color(0xFF3A1A1A)
-                                            : AppColors.surfaceVariant,
-                                foregroundColor: AppColors.textPrimary,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8)),
-                              ),
-                              onPressed: c.isTestingKey.value
-                                  ? null
-                                  : () => c.testApiKey(apiKeyCtr.text),
-                              child: c.isTestingKey.value
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: AppColors.textSecondary))
-                                  : const Text('Проверить'),
+                                  : const Text('Далее →'),
                             )),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Obx(() {
-                    if (c.keyTestMessage.value.isEmpty) {
-                      return Text(
-                        'Получите ключ на сайте ${c.aiProvider.value.displayName}',
-                        style: const TextStyle(
-                            color: AppColors.textHint, fontSize: 11),
-                      );
-                    }
-                    return Text(
-                      c.keyTestMessage.value,
-                      style: TextStyle(
-                        color: c.keyTestResult.value == true
-                            ? const Color(0xFF4CAF50)
-                            : const Color(0xFFEF5350),
-                        fontSize: 11,
-                      ),
-                    );
-                  }),
                 ],
               ),
             ),
 
-            // Шаг 2: Выбор модели (dropdown + ручной ввод)
+            // Шаг 2: Проверка соединения
             _AnimatedStep(
               visible: step >= 2,
               child: Column(
@@ -685,22 +677,179 @@ class _AiSetupCard extends StatelessWidget {
                     children: [
                       _stepBadge(3, step >= 2),
                       const SizedBox(width: 8),
-                      const Text('Модель',
-                          style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                      const Expanded(
+                        child: Text('Проверка соединения',
+                            style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      if (step == 2)
+                        GestureDetector(
+                          onTap: () => aiStep.value = 1,
+                          child: const Text('← Назад',
+                              style: TextStyle(
+                                  color: AppColors.textHint, fontSize: 11)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Obx(() {
+                    final result = c.keyTestResult.value;
+                    final testing = c.isTestingKey.value;
+                    final msg = c.keyTestMessage.value;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Статус
+                        if (testing)
+                          const Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.textSecondary),
+                              ),
+                              SizedBox(width: 10),
+                              Text('Проверяю подключение...',
+                                  style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13)),
+                            ],
+                          )
+                        else if (result == true)
+                          Row(
+                            children: const [
+                              Icon(Icons.check_circle,
+                                  size: 16, color: Color(0xFF4CAF50)),
+                              SizedBox(width: 8),
+                              Text('Соединение успешно!',
+                                  style: TextStyle(
+                                      color: Color(0xFF4CAF50),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          )
+                        else if (result == false)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(Icons.error_outline,
+                                      size: 16, color: Color(0xFFEF5350)),
+                                  SizedBox(width: 8),
+                                  Text('Ошибка подключения',
+                                      style: TextStyle(
+                                          color: Color(0xFFEF5350),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                              if (msg.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(msg,
+                                    style: const TextStyle(
+                                        color: AppColors.textHint,
+                                        fontSize: 11)),
+                              ],
+                            ],
+                          )
+                        else
+                          const Text(
+                            'Нажмите «Проверить» для тестового запроса к API',
+                            style: TextStyle(
+                                color: AppColors.textHint, fontSize: 12),
+                          ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: result == true
+                                      ? const Color(0xFF1A3A1A)
+                                      : result == false
+                                          ? const Color(0xFF3A1A1A)
+                                          : AppColors.surfaceVariant,
+                                  foregroundColor: AppColors.textPrimary,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: testing
+                                    ? null
+                                    : () => c.testApiKey(apiKeyCtr.text),
+                                child: Text(result == true
+                                    ? '✓ Проверено'
+                                    : result == false
+                                        ? '↺ Повторить'
+                                        : 'Проверить'),
+                              ),
+                            ),
+                            if (result == true) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.surfaceVariant,
+                                    foregroundColor: AppColors.textPrimary,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(8)),
+                                  ),
+                                  onPressed: () => aiStep.value = 3,
+                                  child: const Text('Далее →'),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    );
+                  }),
+                ],
+              ),
+            ),
+
+            // Шаг 3: Выбор модели (dropdown + ручной ввод)
+            _AnimatedStep(
+              visible: step >= 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  const Divider(color: AppColors.border, height: 1),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      _stepBadge(4, step >= 3),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('Модель',
+                            style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      if (step == 3)
+                        GestureDetector(
+                          onTap: () => aiStep.value = 2,
+                          child: const Text('← Назад',
+                              style: TextStyle(
+                                  color: AppColors.textHint, fontSize: 11)),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Obx(() {
                     final templates = c.aiProvider.value.modelTemplates;
                     final currentModel = c.currentModel.value;
-                    // Если текущая модель не в шаблонах — выбираем null (ручной ввод)
                     final dropdownValue =
                         templates.contains(currentModel) ? currentModel : null;
                     return DropdownButtonFormField<String>(
-                      value: dropdownValue,
+                      initialValue: dropdownValue,
                       dropdownColor: AppColors.surfaceVariant,
                       style: const TextStyle(
                           color: AppColors.textPrimary, fontSize: 13),
@@ -731,7 +880,6 @@ class _AiSetupCard extends StatelessWidget {
                     );
                   }),
                   const SizedBox(height: 8),
-                  // Поле ручного ввода модели
                   Obx(() {
                     final templates = c.aiProvider.value.modelTemplates;
                     final isCustom =
@@ -808,35 +956,63 @@ class _AiSetupCard extends StatelessWidget {
   }
 }
 
-// Индикатор прогресса шагов
+// Индикатор прогресса шагов (4 шага: провайдер, ключ, проверка, модель)
 class _StepIndicator extends StatelessWidget {
   final int currentStep;
   const _StepIndicator({required this.currentStep});
 
+  static const _labels = ['Провайдер', 'Ключ', 'Проверка', 'Модель'];
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(3, (i) {
-        final active = i <= currentStep;
-        final isLast = i == 2;
-        return Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: active ? AppColors.textSecondary : AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
+    return Column(
+      children: [
+        Row(
+          children: List.generate(4, (i) {
+            final active = i <= currentStep;
+            final isLast = i == 3;
+            return Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? AppColors.textSecondary
+                            : AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
+                  if (!isLast) const SizedBox(width: 4),
+                ],
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: List.generate(4, (i) {
+            final active = i <= currentStep;
+            return Expanded(
+              child: Text(
+                _labels[i],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: active
+                      ? AppColors.textSecondary
+                      : AppColors.textHint,
+                  fontSize: 9,
+                  fontWeight:
+                      i == currentStep ? FontWeight.w700 : FontWeight.normal,
                 ),
               ),
-              if (!isLast) const SizedBox(width: 4),
-            ],
-          ),
-        );
-      }),
+            );
+          }),
+        ),
+      ],
     );
   }
 }
@@ -855,6 +1031,302 @@ class _AnimatedStep extends StatelessWidget {
           visible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
       firstChild: child,
       secondChild: const SizedBox.shrink(),
+    );
+  }
+}
+
+// ─── Нормы питания КБЖУ ──────────────────────────────────────────────────────
+
+class _NutritionGoalsCard extends StatefulWidget {
+  @override
+  State<_NutritionGoalsCard> createState() => _NutritionGoalsCardState();
+}
+
+class _NutritionGoalsCardState extends State<_NutritionGoalsCard> {
+  final _settings = Get.find<SettingsService>();
+  late final TextEditingController _calCtr;
+  late final TextEditingController _protCtr;
+  late final TextEditingController _fatCtr;
+  late final TextEditingController _carbCtr;
+
+  @override
+  void initState() {
+    super.initState();
+    _calCtr = TextEditingController(text: _settings.dailyCalories.toStringAsFixed(0));
+    _protCtr = TextEditingController(text: _settings.dailyProtein.toStringAsFixed(0));
+    _fatCtr = TextEditingController(text: _settings.dailyFat.toStringAsFixed(0));
+    _carbCtr = TextEditingController(text: _settings.dailyCarbs.toStringAsFixed(0));
+  }
+
+  @override
+  void dispose() {
+    _calCtr.dispose();
+    _protCtr.dispose();
+    _fatCtr.dispose();
+    _carbCtr.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    await _settings.setDailyCalories(double.tryParse(_calCtr.text) ?? _settings.dailyCalories);
+    await _settings.setDailyProtein(double.tryParse(_protCtr.text) ?? _settings.dailyProtein);
+    await _settings.setDailyFat(double.tryParse(_fatCtr.text) ?? _settings.dailyFat);
+    await _settings.setDailyCarbs(double.tryParse(_carbCtr.text) ?? _settings.dailyCarbs);
+    Get.snackbar(
+      'Сохранено',
+      'Нормы питания обновлены',
+      backgroundColor: const Color(0xFF1E1E1E),
+      colorText: const Color(0xFFFFFFFF),
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Дневные нормы КБЖУ',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Используются в плане питания для отображения прогресса',
+            style: TextStyle(color: AppColors.textHint, fontSize: 11),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _GoalField(label: '🔥 Калории', unit: 'ккал', controller: _calCtr),
+              const SizedBox(width: 8),
+              _GoalField(label: '🥩 Белки', unit: 'г', controller: _protCtr),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _GoalField(label: '🧈 Жиры', unit: 'г', controller: _fatCtr),
+              const SizedBox(width: 8),
+              _GoalField(label: '🍞 Углеводы', unit: 'г', controller: _carbCtr),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.surfaceVariant,
+                foregroundColor: AppColors.textPrimary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: _save,
+              child: const Text('Сохранить нормы'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoalField extends StatelessWidget {
+  final String label;
+  final String unit;
+  final TextEditingController controller;
+
+  const _GoalField({
+    required this.label,
+    required this.unit,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  color: AppColors.textHint, fontSize: 11)),
+          const SizedBox(height: 4),
+          TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(
+                color: AppColors.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              suffixText: unit,
+              suffixStyle: const TextStyle(
+                  color: AppColors.textHint, fontSize: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Настройки Должника ───────────────────────────────────────────────────────
+
+class _DebtorSettingsCard extends StatelessWidget {
+  final _settings = Get.find<SettingsService>();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      child: Column(
+        children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Экран «Должник»',
+                style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: const Text(
+                'Показывать просроченные задачи при запуске приложения',
+                style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+            value: _settings.debtorEnabled,
+            onChanged: (v) => _settings.setDebtorEnabled(v),
+          ),
+          const Divider(color: AppColors.border, height: 1),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('AI-подсказки в «Должнике»',
+                style: TextStyle(color: AppColors.textPrimary)),
+            subtitle: const Text(
+                'Анализировать просрочки и давать советы через AI',
+                style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+            value: _settings.debtorAiHints,
+            onChanged: (v) => _settings.setDebtorAiHints(v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Экспорт / Импорт ────────────────────────────────────────────────────────
+
+class _ExportImportCard extends StatefulWidget {
+  @override
+  State<_ExportImportCard> createState() => _ExportImportCardState();
+}
+
+class _ExportImportCardState extends State<_ExportImportCard> {
+  bool _exporting = false;
+  bool _importing = false;
+
+  Future<void> _doExport() async {
+    setState(() => _exporting = true);
+    try {
+      await ExportImportService().exportToJson();
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _doImport() async {
+    setState(() => _importing = true);
+    try {
+      final result = await ExportImportService().importFromJson();
+      if (!mounted) return;
+      Get.snackbar(
+        result.success ? '✅ Импорт завершён' : '❌ Ошибка импорта',
+        result.message,
+        backgroundColor:
+            result.success ? const Color(0xFF1A3A1A) : const Color(0xFF3A1A1A),
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 4),
+      );
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Резервная копия данных (JSON)',
+            style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Экспортируются задачи, теги, продукты питания и сценарии',
+            style: TextStyle(color: AppColors.textHint, fontSize: 11),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.surfaceVariant,
+                    foregroundColor: AppColors.textPrimary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _exporting ? null : _doExport,
+                  icon: _exporting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.textSecondary))
+                      : const Icon(Icons.upload_outlined, size: 16),
+                  label: Text(_exporting ? 'Экспорт...' : 'Экспорт'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.surfaceVariant,
+                    foregroundColor: AppColors.textPrimary,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _importing ? null : _doImport,
+                  icon: _importing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.textSecondary))
+                      : const Icon(Icons.download_outlined, size: 16),
+                  label: Text(_importing ? 'Импорт...' : 'Импорт'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '⚠️ При импорте уже существующие записи пропускаются',
+            style: TextStyle(color: AppColors.textHint, fontSize: 10),
+          ),
+        ],
+      ),
     );
   }
 }

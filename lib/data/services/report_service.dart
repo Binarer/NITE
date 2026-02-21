@@ -1,7 +1,4 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
-import 'package:timezone/timezone.dart' as tz;
-import '../models/ai_report_model.dart';
 import '../repositories/ai_report_repository.dart';
 import '../repositories/task_repository.dart';
 import 'ai_service.dart';

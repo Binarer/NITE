@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">NiTe</string>
     <string name="nite_widget_description">Показывает ближайшую предстоящую задачу</string>
+    <string name="nite_widget_no_tasks">Нет предстоящих задач</string>
 </resources>

@@ -1,6 +1,8 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:get/get.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import '../repositories/task_repository.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -13,6 +15,7 @@ class NotificationService {
   bool _initialized = false;
 
   // Notification IDs
+  // ignore: unused_field
   static const int _weeklyRetroId = 1;
   static const int _weeklyReportShowId = 2;
   static const int _dailyReportScheduleId = 3;
@@ -20,6 +23,10 @@ class NotificationService {
   static const int _testNotificationId = 99;
   // Task reminders используют ID = 1000 + хэш от task id (по модулю 10000)
   static const int _taskReminderBaseId = 1000;
+
+  // Action IDs
+  static const String _actionComplete = 'task_complete';
+  static const String _actionSnooze = 'task_snooze';
 
   Future<void> init() async {
     if (_initialized) return;
@@ -40,13 +47,23 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _onNotificationAction,
+      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationAction,
+    );
 
     // Запросить разрешения на Android 13+
     await _plugin
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+
+    // Запросить разрешение на точные будильники (Android 12+)
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestExactAlarmsPermission();
 
     _initialized = true;
   }
@@ -204,6 +221,74 @@ class NotificationService {
 
   // ─── Напоминания о конкретных задачах ────────────────────────────────────
 
+  /// Обработчик нажатий на уведомление / action buttons
+  void _onNotificationAction(NotificationResponse response) async {
+    final payload = response.payload; // taskId
+    final actionId = response.actionId;
+
+    if (payload == null) return;
+
+    if (actionId == _actionComplete) {
+      // Отметить задачу выполненной
+      try {
+        final repo = Get.find<TaskRepository>();
+        final task = repo.getById(payload);
+        if (task != null) {
+          final updated = task.copyWith(isCompleted: true);
+          await repo.save(updated);
+        }
+      } catch (_) {}
+    } else if (actionId == _actionSnooze) {
+      // Отложить на 15 минут — показываем новое уведомление через 15 мин
+      try {
+        final repo = Get.find<TaskRepository>();
+        final task = repo.getById(payload);
+        if (task != null) {
+          final notifId = _taskReminderBaseId + payload.hashCode.abs() % 10000;
+          final snoozeAt = tz.TZDateTime.now(tz.local)
+              .add(const Duration(minutes: 15));
+
+          final androidDetails = AndroidNotificationDetails(
+            'task_reminder',
+            'Напоминания о задачах',
+            channelDescription: 'Напоминания о предстоящих задачах',
+            importance: Importance.high,
+            priority: Priority.high,
+            actions: _taskActions(),
+          );
+          final details = NotificationDetails(android: androidDetails);
+
+          await _plugin.zonedSchedule(
+            notifId + 1,
+            '⏰ Отложено (+15 мин)',
+            task.name,
+            snoozeAt,
+            details,
+            payload: payload,
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+          );
+        }
+      } catch (_) {}
+    }
+  }
+
+  List<AndroidNotificationAction> _taskActions() => [
+        const AndroidNotificationAction(
+          _actionComplete,
+          '✅ Выполнить',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        const AndroidNotificationAction(
+          _actionSnooze,
+          '⏰ +15 мин',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+      ];
+
   /// Планирует напоминание о задаче за [minutesBefore] минут до startMinutes.
   /// [taskId] — уникальный ID задачи, [taskName] — название,
   /// [date] — дата задачи, [startMinutes] — время начала (часы*60+минуты).
@@ -238,15 +323,16 @@ class NotificationService {
     // Не планируем уведомление в прошлом
     if (notifyAt.isBefore(tz.TZDateTime.now(tz.local))) return;
 
-    const androidDetails = AndroidNotificationDetails(
+    final androidDetails = AndroidNotificationDetails(
       'task_reminder',
       'Напоминания о задачах',
       channelDescription: 'Напоминания о предстоящих задачах',
       importance: Importance.high,
       priority: Priority.high,
+      actions: _taskActions(),
     );
     const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
@@ -261,6 +347,7 @@ class NotificationService {
       'Через $minutesLabel: $taskName',
       notifyAt,
       details,
+      payload: taskId,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
@@ -314,6 +401,7 @@ class NotificationService {
   }
 
   /// Вычисляет следующий понедельник 12:00 в текущем часовом поясе
+
   tz.TZDateTime _nextMondayAt12() {
     final now = tz.TZDateTime.now(tz.local);
     // weekday: 1=ПН, 7=ВС
@@ -353,4 +441,11 @@ class NotificationService {
     }
     return scheduled;
   }
+}
+
+/// Фоновый обработчик action buttons (top-level функция, обязательно)
+@pragma('vm:entry-point')
+void _onBackgroundNotificationAction(NotificationResponse response) {
+  // Фоновые действия обрабатываются при следующем запуске приложения
+  // Здесь можно логировать или сохранять состояние через SharedPreferences
 }

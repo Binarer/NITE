@@ -311,7 +311,7 @@ class _WeeklyNutritionChart extends StatelessWidget {
                     children: [
                       if (cal > 0)
                         Text(
-                          '${cal.toStringAsFixed(0)}',
+                          cal.toStringAsFixed(0),
                           style: const TextStyle(
                               color: AppColors.textHint, fontSize: 8),
                         ),

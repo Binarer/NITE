@@ -12,16 +12,18 @@ import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
 import 'data/models/ai_report_model.dart';
 import 'data/models/food_item_model.dart';
+import 'data/models/meal_plan_model.dart';
 import 'data/models/scenario_model.dart';
 import 'data/models/subtask_model.dart';
 import 'data/models/tag_model.dart';
 import 'data/models/task_model.dart';
 import 'data/repositories/ai_report_repository.dart';
 import 'data/repositories/food_item_repository.dart';
+import 'data/repositories/meal_plan_repository.dart';
 import 'data/repositories/scenario_repository.dart';
 import 'data/repositories/tag_repository.dart';
 import 'data/repositories/task_repository.dart';
-import 'data/services/mistral_service.dart';
+import 'data/services/export_import_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/report_service.dart';
 import 'data/services/settings_service.dart';
@@ -40,11 +42,15 @@ import 'presentation/screens/food/food_form_screen.dart';
 import 'presentation/screens/food/food_library_screen.dart';
 import 'presentation/screens/scenario/scenario_form_screen.dart';
 import 'presentation/screens/scenario/scenario_list_screen.dart';
+import 'presentation/controllers/meal_plan_controller.dart';
 import 'presentation/controllers/statistics_controller.dart';
 import 'presentation/screens/help/help_screen.dart';
+import 'presentation/screens/debtor/debtor_screen.dart';
+import 'presentation/screens/meal_plan/meal_plan_screen.dart';
 import 'presentation/screens/reports/reports_screen.dart';
 import 'presentation/screens/settings/tag_manager_screen.dart';
 import 'presentation/screens/statistics/statistics_screen.dart';
+import 'presentation/screens/task/task_detail_screen.dart';
 import 'presentation/screens/task/task_form_screen.dart';
 
 void main() async {
@@ -66,6 +72,8 @@ void main() async {
   Hive.registerAdapter(ScenarioTaskAdapter());
   Hive.registerAdapter(ScenarioModelAdapter());
   Hive.registerAdapter(AiReportModelAdapter());
+  Hive.registerAdapter(MealEntryAdapter());
+  Hive.registerAdapter(MealPlanModelAdapter());
 
   // Открытие боксов
   await Hive.openBox<TagModel>(AppConstants.tagsBox);
@@ -74,6 +82,7 @@ void main() async {
   await Hive.openBox<ScenarioModel>(AppConstants.scenariosBox);
   await Hive.openBox(AppConstants.settingsBox);
   await Hive.openBox<AiReportModel>(AppConstants.reportsBox);
+  await Hive.openBox<MealPlanModel>(AppConstants.mealPlansBox);
 
   // Регистрация сервисов и репозиториев в GetX (permanent — живут всё время)
   Get.put(SettingsService(), permanent: true);
@@ -82,6 +91,7 @@ void main() async {
   Get.put(FoodItemRepository(), permanent: true);
   Get.put(ScenarioRepository(), permanent: true);
   Get.put(AiReportRepository(), permanent: true);
+  Get.put(MealPlanRepository(), permanent: true);
 
   // Инициализация тегов по умолчанию
   await Get.find<TagRepository>().initDefaultTags();
@@ -94,6 +104,8 @@ void main() async {
   Get.put(ScenarioController(), permanent: true);
   Get.put(SettingsController(), permanent: true);
   Get.put(StatisticsController(), permanent: true);
+  Get.put(MealPlanController(), permanent: true);
+  Get.put(ExportImportService(), permanent: true);
 
   // Инициализация уведомлений
   final notificationService = NotificationService();
@@ -115,6 +127,12 @@ void main() async {
   // Триггер ретроспективы: если сегодня ПН и есть API ключ — показать отчёт
   _maybeShowWeeklyRetrospective(settingsService, notificationService);
 
+  // Должник: показать экран просрочек если включён
+  _maybeShowDebtor(settingsService);
+
+  // Триггер ежедневного отчёта: если время >= 22:00 и нет отчёта за сегодня
+  _maybeShowDailyReport(settingsService);
+
   runApp(const NiteApp());
 }
 
@@ -134,7 +152,9 @@ void _maybeShowWeeklyRetrospective(
   if (!settings.notificationsEnabled) return;
   if (DateTime.now().weekday != DateTime.monday) return;
 
-  final apiKey = settings.mistralApiKey;
+  // Используем универсальный провайдер вместо legacy Mistral-ключа
+  final provider = settings.aiProvider;
+  final apiKey = settings.getApiKey(provider);
   if (apiKey.isEmpty) return;
 
   // Проверяем интернет
@@ -159,12 +179,12 @@ void _maybeShowWeeklyRetrospective(
   if (completedTasks.isEmpty) return;
 
   try {
-    final service = MistralService(apiKey: apiKey);
-    final report = await service.generateWeeklyRetrospective(completedTasks);
+    final reportService = ReportService();
+    final report = await reportService.generateWeeklyReport(
+      weekStart: lastMonday,
+    );
 
-    // Push-уведомление (краткое)
-    final shortSummary = report.length > 120 ? '${report.substring(0, 120)}...' : report;
-    await notifications.showRetrospectiveNotification(shortSummary);
+    if (report == null) return;
 
     // Диалог внутри приложения (развёрнутый отчёт) — показываем после запуска
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -176,6 +196,120 @@ void _maybeShowWeeklyRetrospective(
   } catch (_) {
     // Тихо игнорируем ошибки ретроспективы — не мешаем запуску приложения
   }
+}
+
+/// Проверяет: если время >= 22:00 и за сегодня отчёт ещё не генерировался —
+/// генерирует ежедневный AI-отчёт и показывает его.
+void _maybeShowDailyReport(SettingsService settings) async {
+  if (!settings.notificationsEnabled) return;
+  final now = DateTime.now();
+  if (now.hour < 22) return;
+
+  final provider = settings.aiProvider;
+  final apiKey = settings.getApiKey(provider);
+  if (apiKey.isEmpty) return;
+
+  // Проверяем — был ли уже отчёт за сегодня
+  try {
+    final reportRepo = Get.find<AiReportRepository>();
+    final today = DateTime(now.year, now.month, now.day);
+    final existing = reportRepo.getDailyReport(today);
+    if (existing != null) return; // уже есть отчёт за сегодня
+  } catch (_) {
+    return;
+  }
+
+  // Проверяем интернет
+  try {
+    final result = await InternetAddress.lookup('api.mistral.ai');
+    if (result.isEmpty || result[0].rawAddress.isEmpty) return;
+  } catch (_) {
+    return;
+  }
+
+  try {
+    final report = await ReportService().generateDailyReport(date: now);
+    if (report == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.dialog(
+        _DailyReportDialog(report: report),
+        barrierDismissible: true,
+      );
+    });
+  } catch (_) {}
+}
+
+/// Диалог с ежедневным отчётом от AI
+class _DailyReportDialog extends StatelessWidget {
+  final String report;
+  const _DailyReportDialog({required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1C1C1C),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFF3A3A3A)),
+      ),
+      title: const Row(
+        children: [
+          Text('📊', style: TextStyle(fontSize: 20)),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Итоги дня',
+              style: TextStyle(
+                color: Color(0xFFFFFFFF),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Text(
+          report,
+          style: const TextStyle(
+            color: Color(0xFFB0B0B0),
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Get.back(),
+          child: const Text(
+            'Закрыть',
+            style: TextStyle(color: Color(0xFF888888)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Показывает экран "Должник" если есть просроченные задачи и функция включена
+void _maybeShowDebtor(SettingsService settings) {
+  if (!settings.debtorEnabled) return;
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      final taskRepo = Get.find<TaskRepository>();
+      final today = DateTime.now();
+      final todayDay = DateTime(today.year, today.month, today.day);
+      final overdue = taskRepo.getAll().where((t) =>
+          !t.isCompleted &&
+          DateTime(t.date.year, t.date.month, t.date.day)
+              .isBefore(todayDay)).toList();
+      if (overdue.isNotEmpty) {
+        Get.toNamed(AppRoutes.debtor);
+      }
+    } catch (_) {}
+  });
 }
 
 /// Диалог с развёрнутым еженедельным отчётом от AI
@@ -258,6 +392,10 @@ class NiteApp extends StatelessWidget {
           binding: _TaskFormBinding(),
         ),
         GetPage(
+          name: AppRoutes.taskDetail,
+          page: () => const TaskDetailScreen(),
+        ),
+        GetPage(
           name: AppRoutes.taskEdit,
           page: () => const TaskFormScreen(),
           binding: _TaskFormBinding(),
@@ -297,6 +435,14 @@ class NiteApp extends StatelessWidget {
         GetPage(
           name: AppRoutes.help,
           page: () => const HelpScreen(),
+        ),
+        GetPage(
+          name: AppRoutes.mealPlan,
+          page: () => const MealPlanScreen(),
+        ),
+        GetPage(
+          name: AppRoutes.debtor,
+          page: () => const DebtorScreen(),
         ),
       ],
     );

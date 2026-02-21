@@ -6,6 +6,7 @@ class AppConstants {
   static const String scenariosBox = 'scenarios';
   static const String settingsBox = 'settings';
   static const String reportsBox = 'reports';
+  static const String mealPlansBox = 'meal_plans';
 
   // Hive type IDs
   static const int tagTypeId = 0;
@@ -16,6 +17,8 @@ class AppConstants {
   static const int macroNutrientsTypeId = 5;
   static const int subtaskTypeId = 6;
   static const int aiReportTypeId = 7;
+  static const int mealPlanTypeId = 8;
+  static const int mealEntryTypeId = 9;
 
   // Contacts (from .env concept — set your values here)
   static const String contactTelegram = '@wasitfallen';

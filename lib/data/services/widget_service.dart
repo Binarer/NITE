@@ -18,7 +18,7 @@ class WidgetService {
   Future<void> init() async {
     if (!Platform.isAndroid) return;
     await HomeWidget.setAppGroupId(_appGroupId);
-    await HomeWidget.registerBackgroundCallback(_backgroundCallback);
+    await HomeWidget.registerInteractivityCallback(_backgroundCallback);
   }
 
   /// Обновляет виджет данными ближайшей предстоящей задачи.

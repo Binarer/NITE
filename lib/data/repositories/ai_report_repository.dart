@@ -72,6 +72,20 @@ class AiReportRepository {
     return report;
   }
 
+  /// Возвращает дневной отчёт за конкретный день (или null если нет)
+  AiReportModel? getDailyReport(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    try {
+      return _box.values.firstWhere((r) =>
+          r.type == 'daily' &&
+          r.date.year == day.year &&
+          r.date.month == day.month &&
+          r.date.day == day.day);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> delete(String id) async {
     await _box.delete(id);
   }

@@ -167,6 +167,22 @@ class AppSidebar extends StatelessWidget {
                       },
                     ),
                     _SidebarItem(
+                      icon: Icons.food_bank_outlined,
+                      label: 'План питания',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Get.toNamed(AppRoutes.mealPlan);
+                      },
+                    ),
+                    _SidebarItem(
+                      icon: Icons.running_with_errors_outlined,
+                      label: 'Должник',
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        Get.toNamed(AppRoutes.debtor);
+                      },
+                    ),
+                    _SidebarItem(
                       icon: Icons.auto_awesome_mosaic_outlined,
                       label: 'Сценарии',
                       onTap: () {
@@ -245,7 +261,7 @@ class _SidebarItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          color: isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
