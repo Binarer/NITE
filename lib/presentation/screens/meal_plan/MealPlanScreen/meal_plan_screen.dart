@@ -85,11 +85,16 @@ class MealPlanScreen extends StatelessWidget {
   }
 
   void _showAiPlanDialog(BuildContext context, MealPlanController c) {
-    String selectedGoal = 'maintain';
+    final settings = Get.find<SettingsService>();
+    final savedGoalType = settings.weightGoalType;
+    String selectedGoal = savedGoalType.isNotEmpty ? savedGoalType : 'maintain';
     final statsCtrl = Get.find<StatisticsController>();
     final weightKg = statsCtrl.weightEntries.isNotEmpty
         ? statsCtrl.weightEntries.last.kg
         : null;
+    final targetWeightKg = settings.targetWeightKg;
+    final muscleGainKg = settings.muscleGainKg;
+    final deadline = settings.weightGoalDeadline;
 
     Get.dialog(
       StatefulBuilder(
@@ -129,6 +134,38 @@ class MealPlanScreen extends StatelessWidget {
                   'Вес: ${weightKg.toStringAsFixed(1)} кг  •  Рост: ${statsCtrl.heightCm.toStringAsFixed(0)} см',
                   style: const TextStyle(color: AppColors.textHint, fontSize: 12),
                 ),
+              if (targetWeightKg > 0 || deadline != null || muscleGainKg > 0) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D1A0D),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF1E3A1E)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('📋 Цель из настроек',
+                          style: TextStyle(color: Color(0xFF81C784), fontSize: 11, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      if (targetWeightKg > 0)
+                        Text('• Целевой вес: ${targetWeightKg.toStringAsFixed(1)} кг',
+                            style: const TextStyle(color: Color(0xFF81C784), fontSize: 11)),
+                      if (muscleGainKg > 0)
+                        Text('• Набор мышц: ${muscleGainKg.toStringAsFixed(1)} кг',
+                            style: const TextStyle(color: Color(0xFF81C784), fontSize: 11)),
+                      if (deadline != null)
+                        Text(
+                          '• Срок: ${deadline.day}.${deadline.month.toString().padLeft(2, '0')}.${deadline.year} '
+                          '(${deadline.difference(DateTime.now()).inDays} дн.)',
+                          style: const TextStyle(color: Color(0xFF81C784), fontSize: 11),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               const Text('Цель:', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
               const SizedBox(height: 8),

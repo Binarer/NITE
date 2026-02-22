@@ -12,6 +12,7 @@ import 'package:nite/data/services/SettingsService/settings_service.dart';
 import 'package:nite/data/services/UpdateService/update_service.dart';
 import 'package:nite/presentation/controllers/FoodItemController/food_item_controller.dart';
 import 'package:nite/presentation/controllers/SettingsController/settings_controller.dart';
+import 'package:nite/presentation/controllers/StatisticsController/statistics_controller.dart';
 import 'package:nite/presentation/widgets/common/SectionHeader/section_header.dart';
 import 'package:nite/presentation/widgets/common/SettingsSwitchTile/settings_switch_tile.dart';
 
@@ -462,6 +463,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // --- Профиль тела ---
           SectionHeader(title: 'Профиль тела', padding: const EdgeInsets.only(bottom: 8)),
           _BodyProfileCard(),
+          const SizedBox(height: 20),
+
+          // --- Учёт веса ---
+          SectionHeader(title: 'Учёт веса', padding: const EdgeInsets.only(bottom: 8)),
+          _WeightTrackingCard(),
           const SizedBox(height: 20),
 
           // --- Цель по весу ---
@@ -1310,12 +1316,13 @@ class _WeightGoalCard extends StatefulWidget {
 
 class _WeightGoalCardState extends State<_WeightGoalCard> {
   late TextEditingController _targetKgCtr;
+  late TextEditingController _muscleGainCtr;
   late SettingsService _s;
 
   static const _goalTypes = [
-    ('loss',     '📉 Снижение веса'),
-    ('maintain', '⚖️ Поддержание'),
-    ('gain',     '📈 Набор массы'),
+    ('loss',     '🔻 Похудеть'),
+    ('maintain', '⚖️ Поддерживать'),
+    ('gain',     '💪 Набрать массу'),
   ];
 
   @override
@@ -1325,11 +1332,15 @@ class _WeightGoalCardState extends State<_WeightGoalCard> {
     _targetKgCtr = TextEditingController(
       text: _s.targetWeightKg > 0 ? _s.targetWeightKg.toStringAsFixed(1) : '',
     );
+    _muscleGainCtr = TextEditingController(
+      text: _s.muscleGainKg > 0 ? _s.muscleGainKg.toStringAsFixed(1) : '',
+    );
   }
 
   @override
   void dispose() {
     _targetKgCtr.dispose();
+    _muscleGainCtr.dispose();
     super.dispose();
   }
 
@@ -1397,8 +1408,33 @@ class _WeightGoalCardState extends State<_WeightGoalCard> {
                   if (val != null && val > 0) _s.setTargetWeightKg(val);
                 },
               ),
-              const SizedBox(height: 14),
 
+              // Желаемый прирост мышечной массы — только для gain
+              if (currentGoal == 'gain') ...[
+                const SizedBox(height: 14),
+                const Text('Желаемый прирост мышц', style: TextStyle(
+                    color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                const Text('Сколько кг мышечной массы хочу набрать',
+                    style: TextStyle(color: AppColors.textHint, fontSize: 11)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _muscleGainCtr,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: '5.0', suffixText: 'кг мышц',
+                    suffixStyle: TextStyle(color: AppColors.textHint, fontSize: 12),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  onChanged: (v) {
+                    final val = double.tryParse(v.replaceAll(',', '.'));
+                    if (val != null && val >= 0) _s.setMuscleGainKg(val);
+                  },
+                ),
+              ],
+
+              const SizedBox(height: 14),
               // Срок
               const Text('Срок достижения', style: TextStyle(
                   color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
@@ -1459,32 +1495,250 @@ class _WeightGoalCardState extends State<_WeightGoalCard> {
               ),
               if (deadline != null) ...[
                 const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D1A0D),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF1E3A1E)),
-                  ),
-                  child: Builder(builder: (_) {
-                    final daysLeft = deadline.difference(DateTime.now()).inDays;
-                    final targetKg = _s.targetWeightKg;
-                    if (daysLeft <= 0 || targetKg == 0) return const SizedBox.shrink();
-                    final delta = ((targetKg - 70) * 7700 / daysLeft).clamp(-500.0, 500.0);
-                    final sign = delta >= 0 ? '+' : '';
-                    return Text(
-                      'До цели $daysLeft дн. • $sign${delta.toStringAsFixed(0)} ккал/день',
-                      style: const TextStyle(color: Color(0xFF81C784), fontSize: 12),
-                    );
-                  }),
-                ),
+                Builder(builder: (_) {
+                  final daysLeft = deadline.difference(DateTime.now()).inDays;
+                  final targetKg = _s.targetWeightKg;
+                  final currentKg = Get.find<StatisticsController>()
+                      .weightEntries.isNotEmpty
+                      ? Get.find<StatisticsController>().weightEntries.last.kg
+                      : 70.0;
+                  if (daysLeft <= 0 || targetKg == 0) return const SizedBox.shrink();
+                  final delta = ((targetKg - currentKg) * 7700 / daysLeft).clamp(-500.0, 500.0);
+                  final sign = delta >= 0 ? '+' : '';
+                  final muscleKg = _s.muscleGainKg;
+                  return Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D1A0D),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF1E3A1E)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'До цели $daysLeft дн.  $sign${delta.toStringAsFixed(0)} ккал/день',
+                          style: const TextStyle(color: Color(0xFF81C784), fontSize: 12),
+                        ),
+                        if (currentGoal == 'gain' && muscleKg > 0) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Прирост мышц: ${muscleKg.toStringAsFixed(1)} кг '
+                            '(~${(muscleKg / (daysLeft / 30)).toStringAsFixed(2)} кг/мес)',
+                            style: const TextStyle(color: Color(0xFF81C784), fontSize: 12),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
               ],
             ],
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => Get.toNamed(AppRoutes.mealPlan),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.textSecondary),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('🥗', style: TextStyle(fontSize: 16)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Создать AI-план питания',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(width: 6),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.textSecondary),
+                  ],
+                ),
+              ),
+            ),
           ],
         );
       }),
     );
   }
+}
+
+// ─── _WeightTrackingCard (синхронизирован со StatisticsController) ────────────
+
+class _WeightTrackingCard extends StatefulWidget {
+  const _WeightTrackingCard();
+  @override
+  State<_WeightTrackingCard> createState() => _WeightTrackingCardState();
+}
+
+class _WeightTrackingCardState extends State<_WeightTrackingCard> {
+  late TextEditingController _kgCtr;
+  late StatisticsController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = Get.find<StatisticsController>();
+    final last = _c.weightEntries.isNotEmpty ? _c.weightEntries.last.kg : 70.0;
+    _kgCtr = TextEditingController(text: last.toStringAsFixed(1));
+  }
+
+  @override
+  void dispose() {
+    _kgCtr.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Текущий вес', style: TextStyle(
+              color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _kgCtr,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                decoration: const InputDecoration(
+                  hintText: '70.0',
+                  suffixText: 'кг',
+                  suffixStyle: TextStyle(color: AppColors.textHint, fontSize: 12),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.surfaceVariant,
+                foregroundColor: AppColors.textPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                final val = double.tryParse(_kgCtr.text.replaceAll(',', '.'));
+                if (val != null && val > 0) {
+                  _c.addWeightEntry(val);
+                  setState(() {});
+                }
+              },
+              child: const Text('Сохранить'),
+            ),
+          ]),
+          const SizedBox(height: 14),
+          Obx(() {
+            final entries = _c.weightEntries;
+            if (entries.isEmpty) {
+              return const Center(
+                child: Text('Нет данных', style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+              );
+            }
+            return SizedBox(
+              height: 80,
+              child: CustomPaint(
+                painter: _MiniWeightChartPainter(List.from(entries)),
+                size: const Size(double.infinity, 80),
+              ),
+            );
+          }),
+          const SizedBox(height: 10),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 8),
+          const Text('История', style: TextStyle(
+              color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Obx(() {
+            final entries = _c.weightEntries.reversed.take(5).toList();
+            if (entries.isEmpty) {
+              return const Text('Нет записей', style: TextStyle(color: AppColors.textHint, fontSize: 12));
+            }
+            return Column(
+              children: entries.map((e) {
+                final label =
+                    '${e.date.day.toString().padLeft(2, '0')}.${e.date.month.toString().padLeft(2, '0')}.${e.date.year}';
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(children: [
+                    Text(label, style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
+                    const Spacer(),
+                    Text('${e.kg.toStringAsFixed(1)} кг',
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        _c.removeWeightEntry(e.date);
+                        setState(() {});
+                      },
+                      child: const Icon(Icons.close, size: 14, color: AppColors.textHint),
+                    ),
+                  ]),
+                );
+              }).toList(),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniWeightChartPainter extends CustomPainter {
+  final List<WeightEntry> entries;
+  _MiniWeightChartPainter(this.entries);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (entries.isEmpty) return;
+    if (entries.length == 1) {
+      final paint = Paint()..color = AppColors.textSecondary..strokeWidth = 2;
+      canvas.drawCircle(Offset(size.width / 2, size.height / 2), 4, paint);
+      return;
+    }
+    final minKg = entries.map((e) => e.kg).reduce((a, b) => a < b ? a : b);
+    final maxKg = entries.map((e) => e.kg).reduce((a, b) => a > b ? a : b);
+    final range = (maxKg - minKg).clamp(0.5, double.infinity);
+
+    Offset toOffset(int i) {
+      final x = size.width * i / (entries.length - 1);
+      final y = size.height - (size.height * (entries[i].kg - minKg) / range);
+      return Offset(x, y.clamp(4.0, size.height - 4.0));
+    }
+
+    final linePaint = Paint()
+      ..color = AppColors.textSecondary.withValues(alpha: 0.7)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()..moveTo(toOffset(0).dx, toOffset(0).dy);
+    for (int i = 1; i < entries.length; i++) {
+      final prev = toOffset(i - 1);
+      final curr = toOffset(i);
+      final cp1 = Offset((prev.dx + curr.dx) / 2, prev.dy);
+      final cp2 = Offset((prev.dx + curr.dx) / 2, curr.dy);
+      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, curr.dx, curr.dy);
+    }
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = AppColors.textSecondary;
+    for (int i = 0; i < entries.length; i++) {
+      canvas.drawCircle(toOffset(i), 3, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MiniWeightChartPainter old) => old.entries.length != entries.length;
 }
 
 // ─── Нормы питания ────────────────────────────────────────────────────────────

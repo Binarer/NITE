@@ -24,9 +24,10 @@ abstract class _ProfileKeys {
 
 /// Ключи группы WeightGoal (цель по весу)
 abstract class _WeightGoalKeys {
-  static const goalType   = 'weight_goal_type';
-  static const targetKg   = 'weight_goal_target_kg';
-  static const deadlineMs = 'weight_goal_deadline_ms';
+  static const goalType      = 'weight_goal_type';
+  static const targetKg      = 'weight_goal_target_kg';
+  static const deadlineMs    = 'weight_goal_deadline_ms';
+  static const muscleGainKg  = 'weight_goal_muscle_gain_kg';
 }
 
 /// Ключи группы Nutrition (нормы КБЖУ)
@@ -300,6 +301,12 @@ class SettingsService {
   }
   Future<void> setWeightGoalDeadline(DateTime? date) async =>
       _box.put(_WeightGoalKeys.deadlineMs, date?.millisecondsSinceEpoch ?? 0);
+
+  /// Желаемый прирост мышечной массы (кг) — актуально при goalType == 'gain'
+  double get muscleGainKg =>
+      (_box.get(_WeightGoalKeys.muscleGainKg, defaultValue: 0.0) as num).toDouble();
+  Future<void> setMuscleGainKg(double v) async =>
+      _box.put(_WeightGoalKeys.muscleGainKg, v);
 
   // ════════════════════════════════════════════════════════════════════════════
   // Группа: Nutrition — дневные нормы КБЖУ (единый источник)

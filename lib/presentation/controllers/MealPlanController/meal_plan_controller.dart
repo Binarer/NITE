@@ -246,6 +246,17 @@ class MealPlanController extends GetxController {
               : tdee;
       final double targetProtein = weightKg * (goal == 'gain' ? 2.0 : 1.8);
 
+      final targetWeightKg = settings.targetWeightKg;
+      final muscleGainKg = settings.muscleGainKg;
+      final deadline = settings.weightGoalDeadline;
+      final daysLeft = deadline?.difference(DateTime.now()).inDays;
+
+      final goalDetailsBlock = [
+        if (targetWeightKg > 0) '- Целевой вес: ${targetWeightKg.toStringAsFixed(1)} кг (текущий: ${weightKg.toStringAsFixed(1)} кг)',
+        if (goal == 'gain' && muscleGainKg > 0) '- Набор мышечной массы: ${muscleGainKg.toStringAsFixed(1)} кг',
+        if (daysLeft != null && daysLeft > 0) '- Срок достижения цели: $daysLeft дней',
+      ].join('\n');
+
       final prompt = '''
 Ты — диетолог. Составь план питания на неделю (7 дней, 0=ПН ... 6=ВС).
 
@@ -253,6 +264,7 @@ class MealPlanController extends GetxController {
 - Пол: ${gender == 'male' ? 'мужчина' : 'женщина'}, возраст $age лет, рост ${heightCm.toStringAsFixed(0)} см, вес ${weightKg.toStringAsFixed(1)} кг
 - Цель: $goal (tdee=${tdee.toStringAsFixed(0)} ккал, целевая=${targetKcal.toStringAsFixed(0)} ккал/день)
 - Белок: минимум ${targetProtein.toStringAsFixed(0)} г/день
+${goalDetailsBlock.isNotEmpty ? goalDetailsBlock : ''}
 
 Доступные продукты (используй ТОЛЬКО их, по полю "id"):
 [$foodList]
