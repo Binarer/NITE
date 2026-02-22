@@ -85,6 +85,24 @@ class MealPlanRepository {
     await _box.put(planId, plan.copyWith(entries: updated));
   }
 
+  /// Вставляет продукт в ячейку по индексу (для замены)
+  Future<void> addEntryAt(
+    String planId,
+    int weekday,
+    MealType meal,
+    MealEntry entry,
+    int index,
+  ) async {
+    final plan = _box.get(planId);
+    if (plan == null) return;
+    final key = MealPlanModel.entryKey(weekday, meal);
+    final updated = Map<String, List<MealEntry>>.from(plan.entries);
+    final list = List<MealEntry>.from(updated[key] ?? []);
+    list.insert(index.clamp(0, list.length), entry);
+    updated[key] = list;
+    await _box.put(planId, plan.copyWith(entries: updated));
+  }
+
   /// Обновляет дневные нормы
   Future<void> updateTargets(
     String planId, {

@@ -1,12 +1,8 @@
 ﻿import 'package:get/get.dart';
 import '../../../core/utils/NutritionCalculator/nutrition_calculator.dart';
-import '../../../data/models/FoodItemModel/food_item_model.dart';
 import '../../../data/repositories/FoodItemRepository/food_item_repository.dart';
 import '../../../data/repositories/TaskRepository/task_repository.dart';
-import '../../../data/services/AiService/ai_service.dart';
 import '../../../data/services/SettingsService/settings_service.dart';
-import '../ScenarioController/scenario_controller.dart';
-import '../TagController/tag_controller.dart';
 
 
 enum StatsPeriod { day, week }
@@ -28,8 +24,6 @@ class StatisticsController extends GetxController {
 
   // Учёт веса
   final RxList<WeightEntry> weightEntries = <WeightEntry>[].obs;
-  final RxBool isGeneratingPlan = false.obs;
-  final RxString planResult = ''.obs;
 
   // Для формы добавления веса
   final RxDouble newWeightKg = 70.0.obs;
@@ -189,135 +183,6 @@ class StatisticsController extends GetxController {
           .map((e) => {'date': e.date.millisecondsSinceEpoch, 'kg': e.kg})
           .toList());
     } catch (_) {}
-  }
-
-  // ─── AI-план питания ──────────────────────────────────────────────────────
-
-  Future<void> generateNutritionPlan() async {
-    final settings = Get.find<SettingsService>();
-    final provider = settings.aiProvider;
-    final apiKey = settings.getApiKey(provider);
-    if (apiKey.isEmpty) {
-      planResult.value = 'Нет API ключа. Настройте AI в Настройках.';
-      return;
-    }
-
-    isGeneratingPlan.value = true;
-    planResult.value = '';
-
-    try {
-      final weightKg = weightEntries.isNotEmpty
-          ? weightEntries.last.kg
-          : 70.0;
-
-      // Собираем библиотеку еды
-      final foods = _foodRepo.getAll();
-      final foodLibrary = foods.map((f) => {
-            'name': f.name,
-            'calories': f.calories,
-            'proteins': f.macros.proteins,
-            'fats': f.macros.fats,
-            'carbs': f.macros.carbs,
-          }).toList();
-
-      if (foodLibrary.isEmpty) {
-        planResult.value = 'Библиотека еды пуста. Добавьте продукты сначала.';
-        isGeneratingPlan.value = false;
-        return;
-      }
-
-      final service = AiService(
-        provider: provider,
-        apiKey: apiKey,
-        model: settings.getModel(provider),
-      );
-
-      final plan = await service.generateNutritionPlan(
-        weightKg: weightKg,
-        foodLibrary: foodLibrary,
-        goal: 'набор мышечной массы',
-        heightCm: heightCm,
-        age: age,
-        gender: gender,
-      );
-      planResult.value = plan;
-
-      // Создаём сценарий из плана
-      await _createScenarioFromPlan(plan, foods);
-    } catch (e) {
-      planResult.value = 'Ошибка: $e';
-    } finally {
-      isGeneratingPlan.value = false;
-    }
-  }
-
-  Future<void> _createScenarioFromPlan(
-      String planText, List<FoodItemModel> foods) async {
-    try {
-      final scenarioCtrl = Get.find<ScenarioController>();
-      final tagCtrl = Get.find<TagController>();
-
-      // Ищем тег "Еда"
-      final foodTag = tagCtrl.tags.firstWhereOrNull(
-        (t) => t.name.toLowerCase().contains('еда'),
-      );
-
-      // Парсим план по дням
-      final weekdayMap = {
-        'понедельник': 1, 'вторник': 2, 'среда': 3, 'среду': 3,
-        'четверг': 4, 'пятница': 5, 'пятницу': 5,
-        'суббота': 6, 'субботу': 6, 'воскресенье': 7,
-        'пн': 1, 'вт': 2, 'ср': 3, 'чт': 4, 'пт': 5, 'сб': 6, 'вс': 7,
-      };
-
-      final scenarioTasks = <dynamic>[];
-      final lines = planText.split('\n');
-      int currentWeekday = 1;
-
-      for (final line in lines) {
-        final lower = line.toLowerCase().trim();
-        // Ищем день
-        for (final entry in weekdayMap.entries) {
-          if (lower.contains(entry.key)) {
-            currentWeekday = entry.value;
-            break;
-          }
-        }
-        // Ищем приём пищи (ЗАВТРАК/ОБЕД/УЖИН)
-        if (lower.startsWith('завтрак') ||
-            lower.startsWith('обед') ||
-            lower.startsWith('ужин')) {
-          final parts = line.split(':');
-          if (parts.length > 1) {
-            final mealName = parts[0].trim();
-            final content = parts[1].trim();
-            // Ищем продукт в библиотеке
-            final matchedFood = foods.firstWhereOrNull((f) =>
-                content.toLowerCase().contains(f.name.toLowerCase()));
-
-            final taskName = matchedFood != null
-                ? '$mealName: ${matchedFood.name}'
-                : '$mealName: $content';
-
-            scenarioTasks.add({
-              'name': taskName,
-              'weekday': currentWeekday,
-              'tagIds': foodTag != null ? [foodTag.id] : <String>[],
-              'foodItemId': matchedFood?.id,
-            });
-          }
-        }
-      }
-
-      if (scenarioTasks.isNotEmpty) {
-        await scenarioCtrl.createScenarioFromAiPlan(
-          name: 'AI-план питания (набор массы)',
-          tasks: scenarioTasks,
-        );
-      }
-    } catch (_) {
-      // Не прерываем показ плана если создание сценария не удалось
-    }
   }
 
   // ─── helpers ──────────────────────────────────────────────────────────────

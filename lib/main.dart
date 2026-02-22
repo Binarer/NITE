@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -111,8 +113,9 @@ void main() async {
   Get.put(ExportImportService(), permanent: true);
 
   // Инициализация фоновых задач (генерация AI-отчётов даже при закрытом приложении)
+  // Workmanager поддерживается только на Android и iOS
   final settingsService = Get.find<SettingsService>();
-  if (settingsService.notificationsEnabled) {
+  if (settingsService.notificationsEnabled && (Platform.isAndroid || Platform.isIOS)) {
     await initBackgroundWorker();
   }
 

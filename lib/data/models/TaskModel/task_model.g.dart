@@ -28,12 +28,12 @@ class TaskModelAdapter extends TypeAdapter<TaskModel> {
       endMinutes: fields[8] as int?,
       sortOrder: fields[9] as int,
       foodItemId: fields[10] as String?,
-      foodItemIds: (fields[13] as List).cast<String>(),
+      foodItemIds: (fields[13] as List?)?.cast<String>() ?? [],
       scenarioId: fields[11] as String?,
       isCompleted: fields[12] as bool,
-      subtasks: (fields[14] as List).cast<SubtaskModel>(),
-      foodGrams: fields[15] as double,
-      foodItemGrams: (fields[16] as Map).cast<String, double>(),
+      subtasks: (fields[14] as List?)?.cast<SubtaskModel>() ?? [],
+      foodGrams: fields[15] as double? ?? 100.0,
+      foodItemGrams: (fields[16] as Map?)?.cast<String, double>() ?? {},
     );
   }
 
