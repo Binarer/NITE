@@ -12,7 +12,7 @@ class UpdateService {
   static const _apiUrl = 'https://api.github.com/repos/$_owner/$_repo/releases/latest';
 
   /// Текущая версия приложения (должна совпадать с pubspec.yaml)
-  static const String currentVersion = '1.2.1';
+  static const String currentVersion = '1.2.2';
 
   final _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 8),
@@ -81,30 +81,31 @@ class UpdateService {
   }
 
   void _showUpdateDialog(String version, String changelog, String downloadUrl, String releaseUrl) {
-    // Показываем только если контекст доступен
-    if (!Get.isDialogOpen!) {
-      Get.dialog(
-        _UpdateDialog(
-          version: version,
-          changelog: changelog,
-          downloadUrl: downloadUrl,
-          releaseUrl: releaseUrl,
-        ),
-        barrierDismissible: true,
-      );
-    }
+    if (Get.isBottomSheetOpen == true || Get.isDialogOpen == true) return;
+    Get.bottomSheet(
+      _UpdateBottomSheet(
+        version: version,
+        changelog: changelog,
+        downloadUrl: downloadUrl,
+        releaseUrl: releaseUrl,
+      ),
+      isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+    );
   }
 }
 
-// ─── Диалог обновления ────────────────────────────────────────────────────────
+// ─── Bottom sheet обновления ──────────────────────────────────────────────────
 
-class _UpdateDialog extends StatelessWidget {
+class _UpdateBottomSheet extends StatelessWidget {
   final String version;
   final String changelog;
   final String downloadUrl;
   final String releaseUrl;
 
-  const _UpdateDialog({
+  const _UpdateBottomSheet({
     required this.version,
     required this.changelog,
     required this.downloadUrl,
@@ -113,79 +114,135 @@ class _UpdateDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Container(
+      height: screenHeight / 3,
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(
+          top: BorderSide(color: AppColors.border),
+          left: BorderSide(color: AppColors.border),
+          right: BorderSide(color: AppColors.border),
+        ),
       ),
-      title: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('🚀', style: TextStyle(fontSize: 20)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Drag handle
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ),
+          // Заголовок
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+            child: Row(
               children: [
-                const Text('Доступно обновление',
-                    style: TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
-                Text('Версия $version',
-                    style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
+                const Text('🚀', style: TextStyle(fontSize: 18)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Доступно обновление',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Версия $version',
+                        style: const TextStyle(color: AppColors.textHint, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: Get.back,
+                  icon: const Icon(Icons.close, color: AppColors.textHint, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Divider(color: AppColors.border, height: 1),
+          ),
+          // Changelog
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                changelog.isNotEmpty ? changelog : 'Смотрите детали на странице релиза.',
+                style: const TextStyle(
+                  color: AppColors.textHint,
+                  fontSize: 12,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ),
+          // Кнопки
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+                16, 8, 16, MediaQuery.of(context).padding.bottom + 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      side: const BorderSide(color: AppColors.border),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      Get.back();
+                      launchUrl(Uri.parse(releaseUrl),
+                          mode: LaunchMode.externalApplication);
+                    },
+                    child: const Text('Релиз'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surfaceVariant,
+                      foregroundColor: AppColors.textPrimary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () {
+                      Get.back();
+                      launchUrl(Uri.parse(downloadUrl),
+                          mode: LaunchMode.externalApplication);
+                    },
+                    child: const Text('⬇ Скачать APK'),
+                  ),
+                ),
               ],
             ),
           ),
         ],
       ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (changelog.isNotEmpty) ...[
-                const Text('Что нового:',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text(
-                  changelog.length > 400 ? '${changelog.substring(0, 400)}...' : changelog,
-                  style: const TextStyle(color: AppColors.textHint, fontSize: 12, height: 1.5),
-                ),
-                const SizedBox(height: 12),
-              ],
-              const Text(
-                'Скачайте APK и установите поверх текущей версии — данные сохранятся.',
-                style: TextStyle(color: AppColors.textHint, fontSize: 11, height: 1.4),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: Get.back,
-          child: const Text('Позже', style: TextStyle(color: AppColors.textHint)),
-        ),
-        TextButton(
-          onPressed: () {
-            Get.back();
-            launchUrl(Uri.parse(releaseUrl), mode: LaunchMode.externalApplication);
-          },
-          child: const Text('Открыть релиз', style: TextStyle(color: AppColors.textSecondary)),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.surfaceVariant,
-            foregroundColor: AppColors.textPrimary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          onPressed: () {
-            Get.back();
-            launchUrl(Uri.parse(downloadUrl), mode: LaunchMode.externalApplication);
-          },
-          child: const Text('⬇ Скачать APK'),
-        ),
-      ],
     );
   }
 }

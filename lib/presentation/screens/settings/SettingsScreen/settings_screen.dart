@@ -498,7 +498,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               leading: const Icon(Icons.system_update_outlined, color: AppColors.textSecondary),
               title: const Text('Проверить обновления',
                   style: TextStyle(color: AppColors.textPrimary)),
-              subtitle: const Text('Текущая версия: 1.2.1',
+              subtitle: const Text('Текущая версия: 1.2.2',
                   style: TextStyle(color: AppColors.textHint, fontSize: 12)),
               trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
               onTap: () => UpdateService().checkForUpdate(silent: false),
@@ -522,7 +522,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         fontWeight: FontWeight.bold,
                         letterSpacing: 3)),
                 SizedBox(height: 4),
-                Text('v1.2.0',
+                Text('v1.2.2',
                     style: TextStyle(
                         color: AppColors.textHint, fontSize: 12)),
               ],

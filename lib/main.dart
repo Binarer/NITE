@@ -78,15 +78,35 @@ void main() async {
   Hive.registerAdapter(MealPlanModelAdapter());
   Hive.registerAdapter(DailyMealLogAdapter());
 
-  // Открытие боксов
-  await Hive.openBox<TagModel>(AppConstants.tagsBox);
-  await Hive.openBox<TaskModel>(AppConstants.tasksBox);
-  await Hive.openBox<FoodItemModel>(AppConstants.foodItemsBox);
-  await Hive.openBox<ScenarioModel>(AppConstants.scenariosBox);
-  await Hive.openBox(AppConstants.settingsBox);
-  await Hive.openBox<AiReportModel>(AppConstants.reportsBox);
-  await Hive.openBox<MealPlanModel>(AppConstants.mealPlansBox);
-  await Hive.openBox<DailyMealLog>(AppConstants.dailyMealLogBox);
+  // Открытие боксов с автовосстановлением при повреждении данных.
+  // Если Hive не может прочитать box (несовместимая схема после обновления) —
+  // box удаляется и открывается заново пустым, вместо краша на чёрном экране.
+  Future<void> openBoxSafe<T>(String name) async {
+    try {
+      await Hive.openBox<T>(name);
+    } catch (_) {
+      await Hive.deleteBoxFromDisk(name);
+      await Hive.openBox<T>(name);
+    }
+  }
+
+  Future<void> openDynamicBoxSafe(String name) async {
+    try {
+      await Hive.openBox(name);
+    } catch (_) {
+      await Hive.deleteBoxFromDisk(name);
+      await Hive.openBox(name);
+    }
+  }
+
+  await openBoxSafe<TagModel>(AppConstants.tagsBox);
+  await openBoxSafe<TaskModel>(AppConstants.tasksBox);
+  await openBoxSafe<FoodItemModel>(AppConstants.foodItemsBox);
+  await openBoxSafe<ScenarioModel>(AppConstants.scenariosBox);
+  await openDynamicBoxSafe(AppConstants.settingsBox);
+  await openBoxSafe<AiReportModel>(AppConstants.reportsBox);
+  await openBoxSafe<MealPlanModel>(AppConstants.mealPlansBox);
+  await openBoxSafe<DailyMealLog>(AppConstants.dailyMealLogBox);
 
   // Регистрация сервисов и репозиториев в GetX (permanent — живут всё время)
   Get.put(SettingsService(), permanent: true);
