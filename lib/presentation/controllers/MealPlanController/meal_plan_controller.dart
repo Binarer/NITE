@@ -165,6 +165,10 @@ class MealPlanController extends GetxController {
           priority: 2,
           startMinutes: meal.defaultStartMinutes,
           endMinutes: meal.defaultStartMinutes + 30,
+          foodItemIds: entries.map((e) => e.foodItemId).toList(),
+          foodItemGrams: {
+            for (final e in entries) e.foodItemId: e.grams,
+          },
         ));
       }
     }

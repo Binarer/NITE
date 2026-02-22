@@ -1,5 +1,6 @@
 ﻿import 'package:hive/hive.dart';
 import '../../../core/constants/AppConstants/app_constants.dart';
+import '../SubtaskModel/subtask_model.dart';
 
 part 'scenario_model.g.dart';
 
@@ -46,6 +47,10 @@ class ScenarioTask extends HiveObject {
   @HiveField(10)
   Map<String, double> foodItemGrams;
 
+  /// Подзадачи шаблона
+  @HiveField(11)
+  List<SubtaskModel> subtasks;
+
   ScenarioTask({
     required this.id,
     required this.name,
@@ -58,6 +63,7 @@ class ScenarioTask extends HiveObject {
     this.endMinutes,
     this.foodItemIds = const [],
     this.foodItemGrams = const {},
+    this.subtasks = const [],
   });
 
   ScenarioTask copyWith({
@@ -72,6 +78,7 @@ class ScenarioTask extends HiveObject {
     int? endMinutes,
     List<String>? foodItemIds,
     Map<String, double>? foodItemGrams,
+    List<SubtaskModel>? subtasks,
   }) {
     return ScenarioTask(
       id: id ?? this.id,
@@ -85,6 +92,7 @@ class ScenarioTask extends HiveObject {
       endMinutes: endMinutes ?? this.endMinutes,
       foodItemIds: foodItemIds ?? this.foodItemIds,
       foodItemGrams: foodItemGrams ?? this.foodItemGrams,
+      subtasks: subtasks ?? this.subtasks,
     );
   }
 }

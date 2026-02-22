@@ -3,8 +3,12 @@ import 'package:get/get.dart';
 import 'package:nite/core/constants/AppConstants/app_constants.dart';
 import 'package:nite/core/theme/AppTheme/app_theme.dart';
 import 'package:nite/data/models/ScenarioModel/scenario_model.dart';
+import 'package:nite/data/models/SubtaskModel/subtask_model.dart';
+import 'package:nite/presentation/controllers/FoodItemController/food_item_controller.dart';
 import 'package:nite/presentation/controllers/ScenarioController/scenario_controller.dart';
+import 'package:nite/presentation/controllers/TagController/tag_controller.dart';
 import 'package:nite/presentation/widgets/common/TagPickerWidget/tag_picker_widget.dart';
+import 'package:uuid/uuid.dart';
 
 
 class ScenarioFormScreen extends StatefulWidget {
@@ -368,6 +372,27 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
   late ScenarioTask _task;
   late TextEditingController _nameCtr;
   late TextEditingController _descCtr;
+  late List<SubtaskModel> _subtasks;
+  late List<String> _foodItemIds;
+  late Map<String, double> _foodItemGrams;
+  final _subtaskCtr = TextEditingController();
+  final _uuid = const Uuid();
+
+  // Определяем, есть ли тег «еда» среди выбранных
+  bool get _hasFoodTag {
+    try {
+      final tagCtrl = Get.find<TagController>();
+      return _task.tagIds.any((id) {
+        final tag = tagCtrl.tags.firstWhereOrNull((t) => t.id == id);
+        return tag != null &&
+            (tag.name.toLowerCase().contains('еда') ||
+                tag.name.toLowerCase().contains('food') ||
+                tag.name.toLowerCase().contains('питани'));
+      });
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -375,12 +400,16 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
     _task = widget.task;
     _nameCtr = TextEditingController(text: _task.name);
     _descCtr = TextEditingController(text: _task.description);
+    _subtasks = List<SubtaskModel>.from(_task.subtasks);
+    _foodItemIds = List<String>.from(_task.foodItemIds);
+    _foodItemGrams = Map<String, double>.from(_task.foodItemGrams);
   }
 
   @override
   void dispose() {
     _nameCtr.dispose();
     _descCtr.dispose();
+    _subtaskCtr.dispose();
     super.dispose();
   }
 
@@ -414,8 +443,143 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
     }
   }
 
+  void _addSubtask() {
+    final title = _subtaskCtr.text.trim();
+    if (title.isEmpty) return;
+    setState(() {
+      _subtasks = [
+        ..._subtasks,
+        SubtaskModel(id: _uuid.v4(), title: title, isCompleted: false),
+      ];
+    });
+    _subtaskCtr.clear();
+  }
+
+  void _removeSubtask(String id) {
+    setState(() => _subtasks = _subtasks.where((s) => s.id != id).toList());
+  }
+
+  void _addFood() async {
+    final foodCtrl = Get.find<FoodItemController>();
+    // Открываем экран выбора еды в режиме выбора
+    final result = await Get.toNamed(
+      '/food-library',
+      arguments: {'selectionMode': true},
+    );
+    if (result is String) {
+      // вернул один id
+      setState(() {
+        if (!_foodItemIds.contains(result)) {
+          _foodItemIds = [..._foodItemIds, result];
+          _foodItemGrams = {..._foodItemGrams, result: 100.0};
+        }
+      });
+    } else if (result is List) {
+      // вернул список id
+      setState(() {
+        for (final id in result.cast<String>()) {
+          if (!_foodItemIds.contains(id)) {
+            _foodItemIds = [..._foodItemIds, id];
+            _foodItemGrams = {..._foodItemGrams, id: 100.0};
+          }
+        }
+      });
+    } else {
+      // Fallback: показываем bottom sheet со списком еды
+      final food = await _showFoodPickerSheet(foodCtrl);
+      if (food != null && !_foodItemIds.contains(food)) {
+        setState(() {
+          _foodItemIds = [..._foodItemIds, food];
+          _foodItemGrams = {..._foodItemGrams, food: 100.0};
+        });
+      }
+    }
+  }
+
+  Future<String?> _showFoodPickerSheet(FoodItemController foodCtrl) async {
+    final searchCtrl = TextEditingController();
+    String query = '';
+    return await Get.bottomSheet<String>(
+      StatefulBuilder(builder: (ctx, setBS) {
+        final items = foodCtrl.allItems
+            .where((f) =>
+                !f.isHidden &&
+                (query.isEmpty ||
+                    f.name.toLowerCase().contains(query.toLowerCase())))
+            .toList();
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.6,
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: searchCtrl,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  decoration: const InputDecoration(
+                    hintText: 'Поиск продукта...',
+                    prefixIcon: Icon(Icons.search, color: AppColors.textHint),
+                  ),
+                  onChanged: (v) => setBS(() => query = v),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (_, i) {
+                    final f = items[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(f.name,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary, fontSize: 13)),
+                      subtitle: Text(
+                          '${f.calories.toStringAsFixed(0)} ккал / 100г',
+                          style: const TextStyle(
+                              color: AppColors.textHint, fontSize: 11)),
+                      onTap: () => Get.back(result: f.id),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+      isScrollControlled: true,
+    );
+  }
+
+  void _removeFood(String id) {
+    setState(() {
+      _foodItemIds = _foodItemIds.where((i) => i != id).toList();
+      final updated = Map<String, double>.from(_foodItemGrams);
+      updated.remove(id);
+      _foodItemGrams = updated;
+    });
+  }
+
+  void _updateGrams(String id, String val) {
+    final grams = double.tryParse(val.replaceAll(',', '.')) ?? 100.0;
+    setState(() => _foodItemGrams = {..._foodItemGrams, id: grams});
+  }
+
   @override
   Widget build(BuildContext context) {
+    final foodCtrl = Get.find<FoodItemController>();
     return Dialog(
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(
@@ -449,34 +613,55 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
             TextField(
               controller: _descCtr,
               style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(hintText: 'Описание (необязательно)'),
+              decoration:
+                  const InputDecoration(hintText: 'Описание (необязательно)'),
               maxLines: 2,
             ),
             const SizedBox(height: 12),
             // Время
             Row(
               children: [
-                Expanded(child: _timeTile('Начало', _task.startMinutes,
-                    () => _setTime(true),
-                    () => setState(() => _task = ScenarioTask(
-                          id: _task.id, name: _task.name,
-                          description: _task.description,
-                          weekday: _task.weekday, tagIds: _task.tagIds,
-                          priority: _task.priority,
-                          useAiPriority: _task.useAiPriority,
-                          endMinutes: _task.endMinutes,
-                        )))),
+                Expanded(
+                    child: _timeTile(
+                        'Начало',
+                        _task.startMinutes,
+                        () => _setTime(true),
+                        () => setState(() {
+                              _task = ScenarioTask(
+                                id: _task.id,
+                                name: _task.name,
+                                description: _task.description,
+                                weekday: _task.weekday,
+                                tagIds: _task.tagIds,
+                                priority: _task.priority,
+                                useAiPriority: _task.useAiPriority,
+                                endMinutes: _task.endMinutes,
+                                foodItemIds: _task.foodItemIds,
+                                foodItemGrams: _task.foodItemGrams,
+                                subtasks: _task.subtasks,
+                              );
+                            }))),
                 const SizedBox(width: 8),
-                Expanded(child: _timeTile('Конец', _task.endMinutes,
-                    () => _setTime(false),
-                    () => setState(() => _task = ScenarioTask(
-                          id: _task.id, name: _task.name,
-                          description: _task.description,
-                          weekday: _task.weekday, tagIds: _task.tagIds,
-                          priority: _task.priority,
-                          useAiPriority: _task.useAiPriority,
-                          startMinutes: _task.startMinutes,
-                        )))),
+                Expanded(
+                    child: _timeTile(
+                        'Конец',
+                        _task.endMinutes,
+                        () => _setTime(false),
+                        () => setState(() {
+                              _task = ScenarioTask(
+                                id: _task.id,
+                                name: _task.name,
+                                description: _task.description,
+                                weekday: _task.weekday,
+                                tagIds: _task.tagIds,
+                                priority: _task.priority,
+                                useAiPriority: _task.useAiPriority,
+                                startMinutes: _task.startMinutes,
+                                foodItemIds: _task.foodItemIds,
+                                foodItemGrams: _task.foodItemGrams,
+                                subtasks: _task.subtasks,
+                              );
+                            }))),
               ],
             ),
             const SizedBox(height: 12),
@@ -487,32 +672,35 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
                     style: TextStyle(
                         color: AppColors.textSecondary, fontSize: 12)),
                 const SizedBox(width: 12),
-                ...List.generate(6, (i) => GestureDetector(
-                      onTap: () =>
-                          setState(() => _task = _task.copyWith(priority: i)),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _task.priority == i
-                              ? AppColors.priorityColor(i)
-                              : AppColors.surfaceVariant,
-                          border: Border.all(
-                              color: AppColors.priorityColor(i), width: 1.5),
-                        ),
-                        child: Center(
-                          child: Text('$i',
-                              style: TextStyle(
-                                  color: _task.priority == i
-                                      ? Colors.white
-                                      : AppColors.textHint,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    )),
+                ...List.generate(
+                    6,
+                    (i) => GestureDetector(
+                          onTap: () => setState(
+                              () => _task = _task.copyWith(priority: i)),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 6),
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _task.priority == i
+                                  ? AppColors.priorityColor(i)
+                                  : AppColors.surfaceVariant,
+                              border: Border.all(
+                                  color: AppColors.priorityColor(i),
+                                  width: 1.5),
+                            ),
+                            child: Center(
+                              child: Text('$i',
+                                  style: TextStyle(
+                                      color: _task.priority == i
+                                          ? Colors.white
+                                          : AppColors.textHint,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        )),
               ],
             ),
             const SizedBox(height: 12),
@@ -530,6 +718,139 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
                 ids.contains(id) ? ids.remove(id) : ids.add(id);
                 setState(() => _task = _task.copyWith(tagIds: ids));
               },
+            ),
+            // ─── Еда (если тег «еда») ──────────────────────────────────────
+            if (_hasFoodTag) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('Продукты питания:',
+                      style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _addFood,
+                    child: const Icon(Icons.add,
+                        size: 18, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (_foodItemIds.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('Нет продуктов. Нажмите +',
+                      style: const TextStyle(
+                          color: AppColors.textHint, fontSize: 12)),
+                )
+              else
+                ..._foodItemIds.map((id) {
+                  final food = foodCtrl.getById(id);
+                  final grams = _foodItemGrams[id] ?? 100.0;
+                  final gramsCtrl =
+                      TextEditingController(text: grams.toStringAsFixed(0));
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceVariant,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            food?.name ?? id,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 56,
+                          child: TextField(
+                            controller: gramsCtrl,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontSize: 12),
+                            decoration: const InputDecoration(
+                              suffixText: 'г',
+                              suffixStyle: TextStyle(
+                                  color: AppColors.textHint, fontSize: 11),
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                  vertical: 4, horizontal: 4),
+                            ),
+                            onChanged: (v) => _updateGrams(id, v),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () => _removeFood(id),
+                          child: const Icon(Icons.close,
+                              size: 14, color: AppColors.textHint),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+            // ─── Подзадачи ─────────────────────────────────────────────────
+            const SizedBox(height: 16),
+            const Text('Подзадачи:',
+                style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            ..._subtasks.map((s) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.radio_button_unchecked,
+                          size: 14, color: AppColors.textHint),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(s.title,
+                            style: const TextStyle(
+                                color: AppColors.textPrimary, fontSize: 13)),
+                      ),
+                      GestureDetector(
+                        onTap: () => _removeSubtask(s.id),
+                        child: const Icon(Icons.close,
+                            size: 14, color: AppColors.textHint),
+                      ),
+                    ],
+                  ),
+                )),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _subtaskCtr,
+                    style: const TextStyle(
+                        color: AppColors.textPrimary, fontSize: 13),
+                    decoration: const InputDecoration(
+                      hintText: 'Новая подзадача...',
+                      isDense: true,
+                    ),
+                    textCapitalization: TextCapitalization.sentences,
+                    onSubmitted: (_) => _addSubtask(),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add,
+                      size: 18, color: AppColors.textSecondary),
+                  onPressed: _addSubtask,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             // Кнопки
@@ -552,12 +873,16 @@ class _ScenarioTaskDialogState extends State<_ScenarioTaskDialog> {
                   onPressed: () {
                     final name = _nameCtr.text.trim();
                     if (name.isEmpty) return;
-                    Get.back(result: _task.copyWith(
+                    Get.back(
+                        result: _task.copyWith(
                       name: name,
                       description: _descCtr.text.trim(),
+                      foodItemIds: _foodItemIds,
+                      foodItemGrams: _foodItemGrams,
+                      subtasks: _subtasks,
                     ));
                   },
-                  child: const Text('Добавить'),
+                  child: const Text('Сохранить'),
                 ),
               ],
             ),

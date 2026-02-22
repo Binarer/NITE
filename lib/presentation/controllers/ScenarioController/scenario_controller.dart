@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../data/models/ScenarioModel/scenario_model.dart';
+import '../../../data/models/SubtaskModel/subtask_model.dart';
 import '../../../data/repositories/ScenarioRepository/scenario_repository.dart';
 import '../TaskController/task_controller.dart';
 
@@ -91,6 +92,13 @@ class ScenarioController extends GetxController {
         foodGrams: templateTask.foodItemGrams.isNotEmpty
             ? templateTask.foodItemGrams.values.first
             : 100.0,
+        subtasks: templateTask.subtasks
+            .map((s) => SubtaskModel(
+                  id: _uuid.v4(),
+                  title: s.title,
+                  isCompleted: false,
+                ))
+            .toList(),
       );
       created++;
     }
@@ -105,15 +113,31 @@ class ScenarioController extends GetxController {
     final scenario = ScenarioModel(
       id: _uuid.v4(),
       name: name,
-      tasks: tasks.map((t) => ScenarioTask(
-        id: _uuid.v4(),
-        name: t['name'] as String,
-        weekday: (t['weekday'] as int) - 1, // ScenarioTask: 0=ПН
-        tagIds: List<String>.from(t['tagIds'] as List? ?? []),
-        description: '',
-        priority: 0,
-        useAiPriority: false,
-      )).toList(),
+      tasks: tasks.map((t) {
+        // weekday приходит как 0=ПН..6=ВС (уже в нашем формате)
+        final weekday = (t['weekday'] as int).clamp(0, 6);
+        final foodItemIds = List<String>.from(t['foodItemIds'] as List? ?? []);
+        final foodItemGramsRaw = t['foodItemGrams'] as Map? ?? {};
+        final foodItemGrams = foodItemGramsRaw.map(
+          (k, v) => MapEntry(k as String, (v as num).toDouble()),
+        );
+        final startMinutes = t['startMinutes'] as int?;
+        final endMinutes = t['endMinutes'] as int?;
+        final priority = (t['priority'] as int? ?? 0).clamp(0, 5);
+        return ScenarioTask(
+          id: _uuid.v4(),
+          name: t['name'] as String,
+          weekday: weekday,
+          tagIds: List<String>.from(t['tagIds'] as List? ?? []),
+          description: t['description'] as String? ?? '',
+          priority: priority,
+          useAiPriority: false,
+          startMinutes: startMinutes,
+          endMinutes: endMinutes,
+          foodItemIds: foodItemIds,
+          foodItemGrams: foodItemGrams,
+        );
+      }).toList(),
     );
     await saveScenario(scenario);
     Get.snackbar(

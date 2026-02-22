@@ -313,7 +313,11 @@ class TaskDetailScreen extends StatelessWidget {
                         final repo = Get.find<FoodItemRepository>();
                         final item = repo.getById(id);
                         if (item == null) return const SizedBox.shrink();
-                        final ratio = task.foodGrams / 100.0;
+                        // Используем per-item граммы, fallback на legacy foodGrams
+                        final grams = task.foodItemGrams.containsKey(id)
+                            ? task.foodItemGrams[id]!
+                            : task.foodGrams;
+                        final ratio = grams / 100.0;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: _DetailCard(
@@ -337,7 +341,7 @@ class TaskDetailScreen extends StatelessWidget {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        '${task.foodGrams.toStringAsFixed(0)}г  •  '
+                                        '${grams.toStringAsFixed(0)}г  •  '
                                         '${(item.calories * ratio).toStringAsFixed(0)} ккал  •  '
                                         'Б ${(item.macros.proteins * ratio).toStringAsFixed(1)}г  '
                                         'Ж ${(item.macros.fats * ratio).toStringAsFixed(1)}г  '

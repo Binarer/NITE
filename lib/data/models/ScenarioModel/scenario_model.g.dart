@@ -28,13 +28,16 @@ class ScenarioTaskAdapter extends TypeAdapter<ScenarioTask> {
       endMinutes: fields[8] as int?,
       foodItemIds: (fields[9] as List).cast<String>(),
       foodItemGrams: (fields[10] as Map).cast<String, double>(),
+      subtasks: fields[11] == null
+          ? []
+          : (fields[11] as List).cast<SubtaskModel>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, ScenarioTask obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -56,7 +59,9 @@ class ScenarioTaskAdapter extends TypeAdapter<ScenarioTask> {
       ..writeByte(9)
       ..write(obj.foodItemIds)
       ..writeByte(10)
-      ..write(obj.foodItemGrams);
+      ..write(obj.foodItemGrams)
+      ..writeByte(11)
+      ..write(obj.subtasks);
   }
 
   @override
